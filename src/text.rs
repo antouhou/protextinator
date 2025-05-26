@@ -1,7 +1,7 @@
 use crate::style::{TextAlignment, TextWrap};
 use crate::style::TextStyle;
 use crate::math::{Rect, Point};
-use crate::Id;
+use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{
     Align, Attrs, Buffer, Color, Cursor, Family, FontSystem, LayoutCursor, Metrics, Shaping,
@@ -276,17 +276,14 @@ pub(crate) fn buffer_height(buffer: &Buffer, style: &TextStyle, scale: f32) -> f
 }
 
 pub(crate) fn vertical_offset(
-    vertical_alignment: TextAlignment,
+    vertical_alignment: VerticalTextAlignment,
     area: Rect,
     buffer_height: f32,
 ) -> f32 {
     match vertical_alignment {
-        TextAlignment::Start => area.min.y,
-        TextAlignment::End => area.max.y - buffer_height,
-        TextAlignment::Center => area.min.y + (area.height() - buffer_height) / 2.0,
-        TextAlignment::Left => { unimplemented!("There's no left in vertical") }
-        TextAlignment::Right => { unimplemented!("There's no right in vertical") }
-        TextAlignment::Justify => { unimplemented!("Not yet implemented") }
+        VerticalTextAlignment::Start => area.min.y,
+        VerticalTextAlignment::End => area.max.y - buffer_height,
+        VerticalTextAlignment::Center => area.min.y + (area.height() - buffer_height) / 2.0,
     }
 }
 
