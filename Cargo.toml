@@ -1,0 +1,24 @@
+[package]
+name = "protextinator"
+version = "0.1.0"
+edition = "2021"
+description = "Text management, made simple"
+keywords = ["text", "rendering", "gui", "graphics", "image"]
+categories = ["text-processing", "text-editors"]
+authors = ["Anton Suprunchuk <anton.suprunchuk@gmail.com>"]
+license = "Apache-2.0/MIT"
+repository = "https://github.com/antouhou/protextinator"
+documentation = "https://docs.rs/protextinator/"
+readme = "README.md"
+
+[dependencies]
+cosmic-text = "0.12"
+ahash = "0.8.12"
+log = "0.4.27"
+serde = { version = "1.0.219", features = ["derive"] }
+
+[dev-dependencies]
+grafo = "0.6"
+winit = "0.30"
+futures = "0.3"
+env_logger = "0.11"
