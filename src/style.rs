@@ -1,4 +1,4 @@
-use cosmic_text::{Align, Color};
+use cosmic_text::{Align, Color, Family};
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
@@ -117,7 +117,71 @@ impl From<FontColor> for Color {
 }
 
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FontFamily {
+    Name(Box<str>),
+    SansSerif,
+    Serif,
+    Monospace,
+    Cursive,
+    Fantasy,
+}
+
+impl From<&'static str> for FontFamily {
+    fn from(value: &'static str) -> Self {
+        Self::Name(value.into())
+    }
+}
+
+impl From<String> for FontFamily {
+    fn from(value: String) -> Self {
+        Self::Name(value.into())
+    }
+}
+
+impl FontFamily {
+    pub fn new(family: impl Into<Box<str>>) -> Self {
+        Self::Name(family.into())
+    }
+
+    pub fn sans_serif() -> Self {
+        Self::SansSerif
+    }
+
+    pub fn serif() -> Self {
+        Self::Serif
+    }
+
+    pub fn monospace() -> Self {
+        Self::Monospace
+    }
+
+    pub fn to_fontdb_family<'a>(&'a self) -> Family<'a> {
+        match self {
+            FontFamily::Name(a) => {
+                Family::Name(a)
+            }
+            FontFamily::SansSerif => {
+                Family::SansSerif
+            }
+            FontFamily::Serif => {
+                Family::Serif
+            }
+            FontFamily::Monospace => {
+                Family::Monospace
+            }
+            FontFamily::Cursive => {
+                Family::Cursive
+            }
+            FontFamily::Fantasy => {
+                Family::Fantasy
+            }
+        }
+    }
+}
+
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextStyle {
     /// The font size in points.
     pub font_size: FontSize,
@@ -129,6 +193,7 @@ pub struct TextStyle {
     pub horizontal_alignment: TextAlignment,
     pub vertical_alignment: VerticalTextAlignment,
     pub wrap: Option<TextWrap>,
+    pub font_family: FontFamily,
 }
 
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
@@ -187,6 +252,7 @@ impl Default for TextStyle {
             horizontal_alignment: TextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
             wrap: None,
+            font_family: FontFamily::SansSerif,
         }
     }
 }
@@ -201,6 +267,7 @@ impl TextStyle {
             horizontal_alignment: TextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
             wrap: None,
+            font_family: FontFamily::SansSerif,
         }
     }
 

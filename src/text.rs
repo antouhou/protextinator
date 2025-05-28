@@ -5,7 +5,7 @@ use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{
-    Attrs, Buffer, Cursor, Family, FontSystem, LayoutCursor, Metrics, Shaping,
+    Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping,
 };
 
 #[derive(Default)]
@@ -225,7 +225,7 @@ impl TextManager {
         let mut buffer = Buffer::new(font_system, metrics);
         buffer.set_wrap(font_system, text_style.wrap.unwrap_or_default().into());
 
-        let font_family = Family::SansSerif;
+        let font_family = &text_style.font_family;
 
         buffer.set_size(font_system, Some(text_area_size.0), Some(text_area_size.1));
 
@@ -234,7 +234,7 @@ impl TextManager {
             text,
             Attrs::new()
                 .color(font_color.into())
-                .family(font_family)
+                .family(font_family.to_fontdb_family())
                 .metadata(buffer_id.0 as usize),
             Shaping::Advanced,
         );

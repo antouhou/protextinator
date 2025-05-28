@@ -1,9 +1,6 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
-use protextinator::{
-    cosmic_text::FontSystem, FontSize, Id, LineHeight, Point, Rect, TextManager, TextStyle,
-    TextWrap, VerticalTextAlignment,
-};
+use protextinator::{cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager, TextStyle, TextWrap, VerticalTextAlignment};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -128,6 +125,7 @@ impl<'a> App<'a> {
                 horizontal_alignment: protextinator::TextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
+                font_family: FontFamily::SansSerif,
             };
 
             // Use protextinator to shape and cache the text
@@ -198,6 +196,7 @@ impl<'a> App<'a> {
                     horizontal_alignment: protextinator::TextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,
                     wrap: Some(TextWrap::Wrap),
+                    font_family: FontFamily::Serif,
                 };
 
                 // Create another buffer using protextinator for the stats

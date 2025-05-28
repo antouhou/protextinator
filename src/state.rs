@@ -230,7 +230,6 @@ impl TextState {
 
     pub fn shape_if_not_shaped(
         &self,
-        text_style: &TextStyle,
         text_id: Id,
         text_area: impl Into<Rect>,
         ctx: &mut TextContext,
@@ -240,7 +239,7 @@ impl TextState {
         let font_system = &mut ctx.font_system;
         ctx.text_manager.create_and_shape_text_if_not_in_cache(
             &self.text,
-            text_style,
+            &self.text_style,
             text_id,
             text_area,
             font_system,
@@ -356,28 +355,26 @@ impl TextState {
     pub fn update_area_and_recalculate(
         &mut self,
         text_area: impl Into<Rect>,
-        text_style: &TextStyle,
+        text_style: TextStyle,
         ctx: &mut TextContext,
         reshape: bool,
     ) {
         // Update the text area
         self.text_area = text_area.into();
-        self.text_style = *text_style;
+        self.text_style = text_style;
 
         self.recalculate(ctx, reshape);
     }
 
     pub fn recalculate(&mut self, ctx: &mut TextContext, reshape: bool) {
         let text_area = self.text_area;
-        let text_style = self.text_style;
         let text_buffer_id = self.text_buffer_id;
 
-        self.shape_if_not_shaped(&text_style, text_buffer_id, text_area, ctx, reshape);
+        self.shape_if_not_shaped(text_buffer_id, text_area, ctx, reshape);
 
         let buffer = ctx.text_manager.buffer_no_retain_mut(&text_buffer_id).unwrap();
 
         self.recalculate_caret_position_and_scroll(
-            &text_style,
             text_area,
             buffer,
             &mut ctx.font_system,
@@ -413,7 +410,6 @@ impl TextState {
 
     pub fn recalculate_caret_position_and_scroll(
         &mut self,
-        text_style: &TextStyle,
         text_area: Rect,
         buffer: &mut Buffer,
         font_system: &mut FontSystem,
@@ -423,15 +419,15 @@ impl TextState {
 
         let current_relative_caret_offset = self.relative_caret_offset_horizontal;
         let old_scroll = self.scroll;
-        let line_height = text_style.line_height_pt();
+        let line_height = self.text_style.line_height_pt();
         let text_area_width = text_area.width();
         let vertical_scroll_to_align_text =
-            calculate_vertical_offset(text_style, text_area, buffer);
+            calculate_vertical_offset(&self.text_style, text_area, buffer);
 
         let new_absolute_caret_offset = if let Some(absolute_caret_offset) = caret_position.x {
             absolute_caret_offset
         } else {
-            let container_alignment = text_style.horizontal_alignment;
+            let container_alignment = self.text_style.horizontal_alignment;
             // This means that this is an empty line, and the caret should be aligned to according
             //  to the horizontal text alignment
             match container_alignment {

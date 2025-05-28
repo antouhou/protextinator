@@ -1,12 +1,13 @@
 use crate::state::{TextState};
 use crate::{Id, Point, TextManager};
 use ahash::HashMap;
-use cosmic_text::{fontdb, FontSystem};
+use cosmic_text::{fontdb, FontSystem, SwashCache};
 use std::sync::Arc;
 
 pub struct TextContext {
     pub text_manager: TextManager,
     pub font_system: FontSystem,
+    pub swash_cache: SwashCache,
 }
 
 impl Default for TextContext {
@@ -14,6 +15,7 @@ impl Default for TextContext {
         Self {
             text_manager: TextManager::default(),
             font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
         }
     }
 }
