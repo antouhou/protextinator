@@ -1,3 +1,5 @@
+use smol_str::SmolStr;
+
 pub enum Action {
     Paste(String),
     Cut,
@@ -9,10 +11,10 @@ pub enum Action {
     MoveCursorLeft,
     MoveCursorDown,
     MoveCursorUp,
-    InsertChar(char),
+    InsertChar(SmolStr),
 }
 
 pub enum ActionResult {
     None,
-    Text(String),
+    InsertToClipboard(String),
 }

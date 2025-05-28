@@ -1,7 +1,7 @@
-#[cfg(feature = "serialization")]
-use serde::{Deserialize, Serialize};
-use std::hash::Hash;
 use cosmic_text::{Align, Color};
+#[cfg(feature = "serialization")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::hash::Hash;
 
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,6 +66,56 @@ impl From<f32> for FontSize {
 
 impl Eq for FontSize {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FontColor(pub Color);
+
+#[cfg(feature = "serialization")]
+impl Serialize for FontColor {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u32(self.0.0)
+    }
+}
+
+#[cfg(feature = "serialization")]
+impl<'de> Deserialize<'de> for FontColor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let color_value = u32::deserialize(deserializer)?;
+        Ok(FontColor(Color(color_value)))
+    }
+}
+
+impl FontColor {
+    pub fn new(color: Color) -> Self {
+        Self(color)
+    }
+
+    pub fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self(Color::rgb(r, g, b))
+    }
+
+    pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self(Color::rgba(r, g, b, a))
+    }
+}
+
+impl From<Color> for FontColor {
+    fn from(color: Color) -> Self {
+        Self(color)
+    }
+}
+
+impl From<FontColor> for Color {
+    fn from(font_color: FontColor) -> Self {
+        font_color.0
+    }
+}
+
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextStyle {
@@ -74,7 +124,7 @@ pub struct TextStyle {
     /// The line height is a multiplier of the font size.
     pub line_height: LineHeight,
     /// The color of the text.
-    pub font_color: Color,
+    pub font_color: FontColor,
     pub overflow: Option<TextOverflow>,
     pub horizontal_alignment: TextAlignment,
     pub vertical_alignment: VerticalTextAlignment,
@@ -95,7 +145,7 @@ pub enum TextAlignment {
 
 impl Into<Option<Align>> for TextAlignment {
     fn into(self) -> Option<Align> {
-        match self { 
+        match self {
             Self::Start => None,
             Self::End => Some(Align::End),
             Self::Center => Some(Align::Center),
@@ -115,7 +165,6 @@ pub enum VerticalTextAlignment {
     Center,
 }
 
-
 impl Hash for TextStyle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.font_size.hash(state);
@@ -133,7 +182,7 @@ impl Default for TextStyle {
         Self {
             font_size: FontSize(16.0),
             line_height: LineHeight::default(),
-            font_color: Color::rgb(255, 255, 255),
+            font_color: FontColor(Color::rgb(255, 255, 255)),
             overflow: None,
             horizontal_alignment: TextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
@@ -147,7 +196,7 @@ impl TextStyle {
         Self {
             font_size: font_size.into(),
             line_height: LineHeight::default(),
-            font_color,
+            font_color: FontColor(font_color),
             overflow: None,
             horizontal_alignment: TextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
@@ -170,8 +219,8 @@ impl TextStyle {
         self
     }
 
-    pub fn with_font_color(mut self, font_color: Color) -> Self {
-        self.font_color = font_color;
+    pub fn with_font_color(mut self, font_color: impl Into<FontColor>) -> Self {
+        self.font_color = font_color.into();
         self
     }
 
@@ -185,7 +234,11 @@ impl TextStyle {
         self
     }
 
-    pub fn with_alignment(mut self, horizontal: TextAlignment, vertical: VerticalTextAlignment) -> Self {
+    pub fn with_alignment(
+        mut self,
+        horizontal: TextAlignment,
+        vertical: VerticalTextAlignment,
+    ) -> Self {
         self.horizontal_alignment = horizontal;
         self.vertical_alignment = vertical;
         self

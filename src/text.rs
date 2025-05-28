@@ -1,10 +1,11 @@
-use crate::style::{TextAlignment, TextWrap};
+use crate::math::{Point, Rect};
+use crate::state::TextState;
 use crate::style::TextStyle;
-use crate::math::{Rect, Point};
+use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{
-    Align, Attrs, Buffer, Color, Cursor, Family, FontSystem, LayoutCursor, Metrics, Shaping,
+    Attrs, Buffer, Cursor, Family, FontSystem, LayoutCursor, Metrics, Shaping,
 };
 
 #[derive(Default)]
@@ -38,11 +39,11 @@ impl TextManager {
         }
     }
 
-    pub(crate) fn start_frame(&mut self) {
+    pub fn start_frame(&mut self) {
         self.buffers_accessed_last_frame.clear();
     }
 
-    pub(crate) fn end_frame(&mut self) {
+    pub fn end_frame(&mut self) {
         self.buffer_cache
             .retain(|id, _| self.buffers_accessed_last_frame.contains(id));
         #[cfg(feature = "profiling")]
@@ -84,11 +85,11 @@ impl TextManager {
 
     pub fn glyph_under_position(
         &mut self,
-        buffer_id: &Id,
+        state: &TextState,
         font_system: &mut FontSystem,
         interaction_position_relative_to_element: Point,
     ) -> Option<Cursor> {
-        let buffer = self.buffer_no_retain_mut(buffer_id)?;
+        let buffer = self.buffer_no_retain_mut(&state.text_buffer_id)?;
         let horizontal_scroll = buffer.scroll().horizontal;
         let cursor = buffer.hit(
             interaction_position_relative_to_element.x + horizontal_scroll,
@@ -192,7 +193,8 @@ impl TextManager {
         font_system: &mut FontSystem,
         reshape: bool,
     ) {
-        if self.buffer_no_retain(&buffer_id).is_none() || reshape {
+        let buffer_not_in_cache = self.buffer_no_retain(&buffer_id).is_none();
+        if buffer_not_in_cache || reshape {
             self.create_and_shape_text_buffer(
                 text,
                 text_style,
@@ -225,22 +227,18 @@ impl TextManager {
 
         let font_family = Family::SansSerif;
 
-        buffer.set_size(
-            font_system,
-            Some(text_area_size.x),
-            Some(text_area_size.y),
-        );
+        buffer.set_size(font_system, Some(text_area_size.0), Some(text_area_size.1));
 
         buffer.set_text(
             font_system,
             text,
             Attrs::new()
-                .color(font_color)
+                .color(font_color.into())
                 .family(font_family)
                 .metadata(buffer_id.0 as usize),
             Shaping::Advanced,
         );
-        
+
         for line in buffer.lines.iter_mut() {
             line.set_align(horizontal_alignment.into());
         }
@@ -425,8 +423,8 @@ pub(crate) fn calculate_caret_position_pt(
             buffer,
             next_line_first_glyph,
         )
-            .map(|x| x.x)
-            .unwrap_or_default();
+        .map(|x| x.x)
+        .unwrap_or_default();
 
         return Some(CaretPosition {
             x: Some(next_glyph_x_position),

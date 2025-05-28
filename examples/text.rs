@@ -1,9 +1,8 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::{
-    cosmic_text::FontSystem,
-    FontSize, Id, LineHeight, Point, Rect, TextManager, TextStyle, TextWrap,
-    VerticalTextAlignment,
+    cosmic_text::FontSystem, FontSize, Id, LineHeight, Point, Rect, TextManager, TextStyle,
+    TextWrap, VerticalTextAlignment,
 };
 use std::sync::Arc;
 use winit::{
@@ -95,16 +94,16 @@ impl<'a> App<'a> {
     }
 
     fn render_frame(&mut self) {
-        if let (Some(renderer), Some(font_system)) = 
-            (self.renderer.as_mut(), self.font_system.as_mut()) {
-            
+        if let (Some(renderer), Some(font_system)) =
+            (self.renderer.as_mut(), self.font_system.as_mut())
+        {
             // Clear previous frame
             renderer.clear_draw_queue();
 
             // Background rectangle
             let background = Shape::rect(
                 [(0.0, 0.0), (900.0, 700.0)],
-                Color::rgb(30, 34, 42),   // Dark background
+                Color::rgb(30, 34, 42), // Dark background
                 Stroke::new(0.0, Color::TRANSPARENT),
             );
             renderer.add_shape(background, None, (0.0, 0.0), None);
@@ -112,22 +111,19 @@ impl<'a> App<'a> {
             // Text area background
             let text_bg = Shape::rect(
                 [(40.0, 40.0), (860.0, 650.0)],
-                Color::rgb(40, 44, 52),   // Slightly lighter background
+                Color::rgb(40, 44, 52), // Slightly lighter background
                 Stroke::new(2.0, Color::rgb(97, 175, 239)),
             );
             renderer.add_shape(text_bg, None, (0.0, 0.0), None);
 
             // Main text content using protextinator for text management
             let text_id = Id::new("main_text");
-            let text_rect = Rect::new(
-                Point { x: 60.0, y: 60.0 },
-                Point { x: 840.0, y: 630.0 },
-            );
+            let text_rect = Rect::new(Point { x: 60.0, y: 60.0 }, Point { x: 840.0, y: 630.0 });
 
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5), // Light gray
+                font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
                 overflow: None,
                 horizontal_alignment: protextinator::TextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
@@ -155,12 +151,12 @@ impl<'a> App<'a> {
                 // Use grafo's add_text_buffer with protextinator's shaped buffer
                 // This is the perfect integration of both libraries!
                 renderer.add_text_buffer(
-                    buffer,                                          // The cosmic-text buffer from protextinator
-                    text_area,                                       // Area to render in
-                    Color::rgb(229, 229, 229),                     // Fallback color
-                    0.0,                                            // Vertical offset
-                    text_id.0 as usize,                            // Buffer ID (must match the metadata in buffer)
-                    None,                                           // No clipping
+                    buffer,                    // The cosmic-text buffer from protextinator
+                    text_area,                 // Area to render in
+                    Color::rgb(229, 229, 229), // Fallback color
+                    0.0,                       // Vertical offset
+                    text_id.0 as usize,        // Buffer ID (must match the metadata in buffer)
+                    None,                      // No clipping
                 );
             }
 
@@ -168,9 +164,12 @@ impl<'a> App<'a> {
             let cursor_line_estimate = (self.cursor_position as f32 / 60.0) as usize; // Rough estimate
             let cursor_y = 60.0 + (cursor_line_estimate as f32 * text_style.line_height_pt());
             let cursor_x = 60.0 + ((self.cursor_position % 60) as f32 * 12.0); // Very rough approximation
-            
+
             let cursor = Shape::rect(
-                [(cursor_x, cursor_y), (cursor_x + 2.0, cursor_y + text_style.font_size.0)],
+                [
+                    (cursor_x, cursor_y),
+                    (cursor_x + 2.0, cursor_y + text_style.font_size.0),
+                ],
                 Color::rgb(97, 175, 239), // Blue cursor
                 Stroke::new(0.0, Color::TRANSPARENT),
             );
@@ -187,16 +186,14 @@ impl<'a> App<'a> {
                     self.text_manager.buffer_cache.len(),
                     text_id.0
                 );
-                
-                let stats_rect = Rect::new(
-                    Point { x: 60.0, y: 660.0 },
-                    Point { x: 840.0, y: 700.0 },
-                );
+
+                let stats_rect =
+                    Rect::new(Point { x: 60.0, y: 660.0 }, Point { x: 840.0, y: 700.0 });
 
                 let stats_style = TextStyle {
                     font_size: FontSize(14.0),
                     line_height: LineHeight(1.2),
-                    font_color: protextinator::cosmic_text::Color::rgb(0x61, 0xAF, 0xEF), // Light blue
+                    font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(0x61, 0xAF, 0xEF)), // Light blue
                     overflow: None,
                     horizontal_alignment: protextinator::TextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,
@@ -279,32 +276,30 @@ impl<'a> ApplicationHandler for App<'a> {
                         ..
                     },
                 ..
-            } => {
-                match logical_key {
-                    Key::Named(NamedKey::Escape) => {
-                        event_loop.exit();
-                    }
-                    Key::Named(NamedKey::Backspace) => {
-                        self.handle_backspace();
-                        if let Some(window) = &self.window {
-                            window.request_redraw();
-                        }
-                    }
-                    Key::Named(NamedKey::Enter) => {
-                        self.handle_text_input("\n");
-                        if let Some(window) = &self.window {
-                            window.request_redraw();
-                        }
-                    }
-                    Key::Character(text) => {
-                        self.handle_text_input(&text);
-                        if let Some(window) = &self.window {
-                            window.request_redraw();
-                        }
-                    }
-                    _ => {}
+            } => match logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    event_loop.exit();
                 }
-            }
+                Key::Named(NamedKey::Backspace) => {
+                    self.handle_backspace();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                Key::Named(NamedKey::Enter) => {
+                    self.handle_text_input("\n");
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                Key::Character(text) => {
+                    self.handle_text_input(&text);
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
     }

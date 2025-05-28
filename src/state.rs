@@ -1,15 +1,16 @@
-use crate::style::{TextAlignment, VerticalTextAlignment, TextStyle};
+use crate::action::{Action, ActionResult};
+use crate::ctx::TextContext;
+use crate::style::{TextAlignment, TextStyle, VerticalTextAlignment};
 use crate::text::{
     buffer_height, calculate_caret_position_pt, char_index_to_layout_cursor, insert_character_at,
     insert_multiple_characters_at, remove_character_at, remove_multiple_characters_at,
     vertical_offset,
 };
-use crate::{Id, Rect};
+use crate::{Id, Point, Rect, TextManager};
 use cosmic_text::{Buffer, Cursor, FontSystem, Scroll};
-use std::time::{Duration, Instant};
 use smol_str::SmolStr;
-use crate::action::{Action, ActionResult};
-use crate::ctx::TextContext;
+use std::os::macos::raw::stat;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
@@ -43,11 +44,14 @@ pub struct TextState {
 
     pub last_scroll_timestamp: Instant,
     pub scroll_interval: Duration,
-    
+
     pub text_style: TextStyle,
     text_area: Rect,
     pub(crate) text_buffer_id: Id,
     pub caret_width: f32,
+
+    pub is_selectable: bool,
+    pub is_editable: bool,
 }
 
 impl TextState {
@@ -70,10 +74,12 @@ impl TextState {
             text_area: Rect::default(),
             text_style: TextStyle::default(),
             text_buffer_id,
-            caret_width: 3.0, 
+            caret_width: 3.0,
+            is_selectable: false,
+            is_editable: false,
         }
     }
-    
+
     pub fn set_caret_width(&mut self, width: f32) {
         self.caret_width = width;
     }
@@ -227,16 +233,17 @@ impl TextState {
         &self,
         text_style: &TextStyle,
         text_id: Id,
-        element_area: Rect,
+        text_area: impl Into<Rect>,
         ctx: &mut TextContext,
         reshape: bool,
     ) {
+        let text_area = text_area.into();
         let font_system = &mut ctx.font_system;
         ctx.text_manager.create_and_shape_text_if_not_in_cache(
             &self.text,
             text_style,
             text_id,
-            element_area,
+            text_area,
             font_system,
             reshape,
         );
@@ -342,20 +349,20 @@ impl TextState {
         None
     }
 
-    pub fn element_area(&self) -> Rect {
+    pub fn text_area(&self) -> Rect {
         self.text_area
     }
 
     /// DO NOT PASS VALUES FROM THE STATE TO THIS FUNCTION
     pub fn update_area_and_recalculate(
         &mut self,
-        text_area: Rect,
+        text_area: impl Into<Rect>,
         text_style: &TextStyle,
         ctx: &mut TextContext,
         reshape: bool,
     ) {
         // Update the text area
-        self.text_area = text_area;
+        self.text_area = text_area.into();
         self.text_style = *text_style;
 
         self.recalculate(ctx, reshape);
@@ -364,12 +371,11 @@ impl TextState {
     pub fn recalculate(&mut self, ctx: &mut TextContext, reshape: bool) {
         let text_area = self.text_area;
         let text_style = self.text_style;
-        let element_id = self.text_buffer_id;
+        let text_buffer_id = self.text_buffer_id;
 
-        self.shape_if_not_shaped(&text_style, element_id, text_area, ctx, reshape);
+        self.shape_if_not_shaped(&text_style, text_buffer_id, text_area, ctx, reshape);
 
-        let buffer_id = Id::new(element_id);
-        let buffer = ctx.text_manager.buffer_no_retain_mut(&buffer_id).unwrap();
+        let buffer = ctx.text_manager.buffer_no_retain_mut(&text_buffer_id).unwrap();
 
         self.recalculate_caret_position_and_scroll(
             &text_style,
@@ -377,26 +383,23 @@ impl TextState {
             buffer,
             &mut ctx.font_system,
         );
-        self.update_buffer_size_to_match_element(
-            buffer,
-            &text_area,
-            &mut ctx.font_system,
-        );
+        self.update_buffer_size_to_match_element(buffer, text_area, &mut ctx.font_system);
         self.recalculate_selection_area(buffer, &mut ctx.font_system);
     }
 
     fn update_buffer_size_to_match_element(
         &self,
         buffer: &mut Buffer,
-        padded_area: &Rect,
+        area: impl Into<Rect>,
         font_system: &mut FontSystem,
     ) {
+        let area = area.into();
         let scroll = buffer.scroll();
         // TODO: since horizontal scrolling does not appear to work in cosmic_text right
         //  now, we use this hack to scroll the text horizontally
         let text_area = Rect::new(
-            (padded_area.min.x - scroll.horizontal, padded_area.min.y).into(),
-            padded_area.max,
+            (area.min.x - scroll.horizontal, area.min.y).into(),
+            area.max,
         );
 
         buffer.set_size(
@@ -437,9 +440,9 @@ impl TextState {
                 TextAlignment::End => text_area_width,
                 TextAlignment::Center => text_area_width / 2.0,
                 // TODO: check that implementations after this are actually correct
-                TextAlignment::Left => { 0.0 }
-                TextAlignment::Right => { text_area_width }
-                TextAlignment::Justify => { 0.0 }
+                TextAlignment::Left => 0.0,
+                TextAlignment::Right => text_area_width,
+                TextAlignment::Justify => 0.0,
             }
         };
 
@@ -494,17 +497,16 @@ impl TextState {
     }
 
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
-        let buffer_id = Id::new(self.text_buffer_id);
-        ctx.text_manager.buffer_no_retain(&buffer_id).is_none()
+        ctx.text_manager.buffer_no_retain(&self.text_buffer_id).is_none()
     }
 
-    pub fn size_changed(&self, text_area: Rect) -> bool {
-        self.text_area.size() != text_area.size()
+    pub fn size_changed(&self, text_area: (f32, f32)) -> bool {
+        self.text_area.size() != text_area
     }
 
     fn copy_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("".to_string());
-        ActionResult::Text(selected_text)
+        ActionResult::InsertToClipboard(selected_text)
     }
 
     fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
@@ -528,10 +530,13 @@ impl TextState {
         let selected_text = self.selected_text().unwrap_or("".to_string());
         self.remove_selected_text();
         self.recalculate(ctx, true);
-        ActionResult::Text(selected_text)
+        ActionResult::InsertToClipboard(selected_text)
     }
 
-    fn delete_selected_text_or_text_before_cursor(&mut self, ctx: &mut TextContext) -> ActionResult {
+    fn delete_selected_text_or_text_before_cursor(
+        &mut self,
+        ctx: &mut TextContext,
+    ) -> ActionResult {
         if self.is_text_selected() {
             self.remove_selected_text();
         } else {
@@ -570,7 +575,7 @@ impl TextState {
         ActionResult::None
     }
 
-    fn insert_character_before_cursor(&mut self, character: &SmolStr, ctx: &mut TextContext) {
+    fn insert_character_before_cursor(&mut self, character: &SmolStr, ctx: &mut TextContext) -> ActionResult {
         if self.is_text_selected() {
             self.move_cursor_left();
             self.remove_selected_text();
@@ -581,31 +586,30 @@ impl TextState {
         }
 
         self.recalculate(ctx, true);
+        ActionResult::None
     }
 
-    pub fn process_input_data(
+    pub fn apply_action(
         &mut self,
         ctx: &mut TextContext,
-        is_editable: bool,
-        is_selectable: bool,
-        key: Action,
+        action: &Action,
     ) -> ActionResult {
-        if is_editable && !is_selectable {
-            match key {
+        if self.is_editable && self.is_selectable {
+            match action {
                 Action::Paste(text) => self.paste_text_at_cursor(ctx, &text),
                 Action::Cut => self.cut_selected_text(ctx),
                 Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
                 Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
                 Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                 Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
-                Action::InsertChar(character) => self.insert_char_at_cursor(character),
-                _ => { ActionResult::None }
+                Action::InsertChar(character) => self.insert_character_before_cursor(&character, ctx),
+                _ => ActionResult::None,
             }
-        } else if is_selectable {
-            match key {
+        } else if self.is_selectable {
+            match action {
                 Action::Copy => self.copy_selected_text(ctx),
                 Action::SelectAll => self.select_all_recalculate(ctx),
-                _ => { ActionResult::None }
+                _ => ActionResult::None,
             }
         } else {
             ActionResult::None
@@ -615,11 +619,7 @@ impl TextState {
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
 /// that is needed to align the text vertically.
-pub fn calculate_vertical_offset(
-    text_style: &TextStyle,
-    text_area: Rect,
-    buffer: &Buffer,
-) -> f32 {
+pub fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer: &Buffer) -> f32 {
     let area = text_area;
     let normalized_area = Rect::new((0.0, 0.0).into(), (area.width(), area.height()).into());
     let style = text_style;
@@ -653,5 +653,74 @@ pub fn cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
     }
 
     // If cursor.line is beyond the available lines
+    None
+}
+
+pub fn handle_click(
+    state: &mut TextState,
+    text_context: &mut TextContext,
+    click_position_relative_to_area: Point,
+) -> Option<()> {
+    let text_manager = &mut text_context.text_manager;
+    let font_system = &mut text_context.font_system;
+    if state.is_selectable || state.is_editable {
+        state.reset_selection();
+
+        let glyph_cursor = text_manager.glyph_under_position(
+            state,
+            font_system,
+            click_position_relative_to_area,
+        )?;
+        let char_index = cursor_to_char_index(state.text(), glyph_cursor)?;
+        state.move_cursor_to(char_index);
+        state.recalculate(text_context, false);
+    }
+
+    None
+}
+
+pub fn handle_drag(
+    text_state: &mut TextState,
+    ctx: &mut TextContext,
+    is_dragging: bool,
+    pointer_relative_position: Point,
+    pointer_absolute_position: Point,
+) -> Option<()> {
+    let text_manager = &mut ctx.text_manager;
+    let font_system = &mut ctx.font_system;
+    if text_state.is_selectable {
+        let glyph_cursor = text_manager.glyph_under_position(
+            text_state,
+            font_system,
+            pointer_relative_position,
+        )?;
+
+        let char_index_under_position = cursor_to_char_index(text_state.text(), glyph_cursor)?;
+
+        if let Some(origin) = text_state.selection.origin_character_index {
+            if char_index_under_position != origin {
+                text_state.selection.ends_before_character_index =
+                    Some(char_index_under_position + 1);
+            }
+        } else {
+            text_state.selection.origin_character_index = Some(char_index_under_position);
+        }
+
+        // Simple debounce to make scroll speed consistent
+        let now = std::time::Instant::now();
+        if now > text_state.last_scroll_timestamp + text_state.scroll_interval && is_dragging {
+                let element_area = text_state.text_area();
+                let is_dragging_to_the_right = pointer_absolute_position.x > element_area.max.x;
+                let is_dragging_to_the_left = pointer_absolute_position.x < element_area.min.x;
+
+                if is_dragging_to_the_right || is_dragging_to_the_left {
+                    text_state.move_cursor_to(char_index_under_position);
+                    text_state.last_scroll_timestamp = now;
+                }
+        }
+
+        text_state.recalculate(ctx, false);
+    }
+
     None
 }
