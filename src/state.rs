@@ -1,15 +1,14 @@
 use crate::action::{Action, ActionResult};
 use crate::ctx::TextContext;
-use crate::style::{TextAlignment, TextStyle, VerticalTextAlignment};
+use crate::style::{TextAlignment, TextStyle};
 use crate::text::{
     buffer_height, calculate_caret_position_pt, char_index_to_layout_cursor, insert_character_at,
     insert_multiple_characters_at, remove_character_at, remove_multiple_characters_at,
     vertical_offset,
 };
-use crate::{Id, Point, Rect, TextManager};
+use crate::{Id, Point, Rect};
 use cosmic_text::{Buffer, Cursor, FontSystem, Scroll};
 use smol_str::SmolStr;
-use std::os::macos::raw::stat;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -104,7 +103,7 @@ impl TextState {
     pub fn insert_char_at_cursor(&mut self, character: char) -> ActionResult {
         self.text_size = insert_character_at(&mut self.text, self.cursor_before_glyph, character);
         self.cursor_before_glyph += 1;
-        ActionResult::None
+        ActionResult::TextChanged
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
@@ -517,13 +516,13 @@ impl TextState {
         }
 
         self.recalculate(ctx, true);
-        ActionResult::None
+        ActionResult::TextChanged
     }
 
     fn select_all_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.select_all();
         self.recalculate(ctx, false);
-        ActionResult::None
+        ActionResult::CursorUpdated
     }
 
     fn cut_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
@@ -543,14 +542,14 @@ impl TextState {
             self.remove_char_at_cursor();
         }
         self.recalculate(ctx, true);
-        ActionResult::None
+        ActionResult::TextChanged
     }
 
     fn insert_whitespace_at_cursor(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.insert_char_at_cursor(' ');
         self.reset_selection();
         self.recalculate(ctx, true);
-        ActionResult::None
+        ActionResult::TextChanged
     }
 
     fn move_cursor_right_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
@@ -561,7 +560,7 @@ impl TextState {
         }
         self.reset_selection();
         self.recalculate(ctx, false);
-        ActionResult::None
+        ActionResult::CursorUpdated
     }
 
     fn move_cursor_left_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
@@ -572,7 +571,7 @@ impl TextState {
         }
         self.reset_selection();
         self.recalculate(ctx, false);
-        ActionResult::None
+        ActionResult::CursorUpdated
     }
 
     fn insert_character_before_cursor(&mut self, character: &SmolStr, ctx: &mut TextContext) -> ActionResult {
@@ -586,7 +585,7 @@ impl TextState {
         }
 
         self.recalculate(ctx, true);
-        ActionResult::None
+        ActionResult::TextChanged
     }
 
     pub fn apply_action(
@@ -615,11 +614,80 @@ impl TextState {
             ActionResult::None
         }
     }
+
+    pub fn handle_click(
+        &mut self,
+        text_context: &mut TextContext,
+        click_position_relative_to_area: Point,
+    ) -> Option<()> {
+        let text_manager = &mut text_context.text_manager;
+        let font_system = &mut text_context.font_system;
+        if self.is_selectable || self.is_editable {
+            self.reset_selection();
+
+            let glyph_cursor = text_manager.glyph_under_position(
+                self,
+                font_system,
+                click_position_relative_to_area,
+            )?;
+            let char_index = cursor_to_char_index(self.text(), glyph_cursor)?;
+            self.move_cursor_to(char_index);
+            self.recalculate(text_context, false);
+        }
+
+        None
+    }
+
+    pub fn handle_drag(
+        &mut self,
+        ctx: &mut TextContext,
+        is_dragging: bool,
+        pointer_relative_position: Point,
+        pointer_absolute_position: Point,
+    ) -> Option<()> {
+        let text_manager = &mut ctx.text_manager;
+        let font_system = &mut ctx.font_system;
+        if self.is_selectable {
+            let glyph_cursor = text_manager.glyph_under_position(
+                self,
+                font_system,
+                pointer_relative_position,
+            )?;
+
+            let char_index_under_position = cursor_to_char_index(self.text(), glyph_cursor)?;
+
+            if let Some(origin) = self.selection.origin_character_index {
+                if char_index_under_position != origin {
+                    self.selection.ends_before_character_index =
+                        Some(char_index_under_position + 1);
+                }
+            } else {
+                self.selection.origin_character_index = Some(char_index_under_position);
+            }
+
+            // Simple debounce to make scroll speed consistent
+            let now = std::time::Instant::now();
+            if now > self.last_scroll_timestamp + self.scroll_interval && is_dragging {
+                let element_area = self.text_area();
+                let is_dragging_to_the_right = pointer_absolute_position.x > element_area.max.x;
+                let is_dragging_to_the_left = pointer_absolute_position.x < element_area.min.x;
+
+                if is_dragging_to_the_right || is_dragging_to_the_left {
+                    self.move_cursor_to(char_index_under_position);
+                    self.last_scroll_timestamp = now;
+                }
+            }
+
+            self.recalculate(ctx, false);
+        }
+
+        None
+    }
 }
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
-/// that is needed to align the text vertically.
-pub fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer: &Buffer) -> f32 {
+///  needed to align the text vertically.
+fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer: &Buffer) -> f32 {
     let area = text_area;
     let normalized_area = Rect::new((0.0, 0.0).into(), (area.width(), area.height()).into());
     let style = text_style;
@@ -633,7 +701,7 @@ pub fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer
     0.0 - vertical_offset
 }
 
-pub fn cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
+fn cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
     let mut char_index = 0;
 
     // Iterate through lines until we reach cursor.line
@@ -653,74 +721,5 @@ pub fn cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
     }
 
     // If cursor.line is beyond the available lines
-    None
-}
-
-pub fn handle_click(
-    state: &mut TextState,
-    text_context: &mut TextContext,
-    click_position_relative_to_area: Point,
-) -> Option<()> {
-    let text_manager = &mut text_context.text_manager;
-    let font_system = &mut text_context.font_system;
-    if state.is_selectable || state.is_editable {
-        state.reset_selection();
-
-        let glyph_cursor = text_manager.glyph_under_position(
-            state,
-            font_system,
-            click_position_relative_to_area,
-        )?;
-        let char_index = cursor_to_char_index(state.text(), glyph_cursor)?;
-        state.move_cursor_to(char_index);
-        state.recalculate(text_context, false);
-    }
-
-    None
-}
-
-pub fn handle_drag(
-    text_state: &mut TextState,
-    ctx: &mut TextContext,
-    is_dragging: bool,
-    pointer_relative_position: Point,
-    pointer_absolute_position: Point,
-) -> Option<()> {
-    let text_manager = &mut ctx.text_manager;
-    let font_system = &mut ctx.font_system;
-    if text_state.is_selectable {
-        let glyph_cursor = text_manager.glyph_under_position(
-            text_state,
-            font_system,
-            pointer_relative_position,
-        )?;
-
-        let char_index_under_position = cursor_to_char_index(text_state.text(), glyph_cursor)?;
-
-        if let Some(origin) = text_state.selection.origin_character_index {
-            if char_index_under_position != origin {
-                text_state.selection.ends_before_character_index =
-                    Some(char_index_under_position + 1);
-            }
-        } else {
-            text_state.selection.origin_character_index = Some(char_index_under_position);
-        }
-
-        // Simple debounce to make scroll speed consistent
-        let now = std::time::Instant::now();
-        if now > text_state.last_scroll_timestamp + text_state.scroll_interval && is_dragging {
-                let element_area = text_state.text_area();
-                let is_dragging_to_the_right = pointer_absolute_position.x > element_area.max.x;
-                let is_dragging_to_the_left = pointer_absolute_position.x < element_area.min.x;
-
-                if is_dragging_to_the_right || is_dragging_to_the_left {
-                    text_state.move_cursor_to(char_index_under_position);
-                    text_state.last_scroll_timestamp = now;
-                }
-        }
-
-        text_state.recalculate(ctx, false);
-    }
-
     None
 }

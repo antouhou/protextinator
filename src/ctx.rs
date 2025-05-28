@@ -1,4 +1,4 @@
-use crate::state::{handle_click, handle_drag, TextState};
+use crate::state::{TextState};
 use crate::{Id, Point, TextManager};
 use ahash::HashMap;
 use cosmic_text::{fontdb, FontSystem};
@@ -28,7 +28,7 @@ impl Kek {
     pub fn handle_click(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
-            handle_click(state, text_manager, click_position_relative.into());
+            state.handle_click(text_manager, click_position_relative.into());
             state.is_focused = true;
         } else {
             //TODO: print warning
@@ -44,8 +44,7 @@ impl Kek {
     ) -> Option<()> {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
-            handle_drag(
-                state,
+            state.handle_drag(
                 text_manager,
                 is_dragging,
                 drag_position_relative.into(),

@@ -7,13 +7,13 @@ mod style;
 mod text;
 
 pub use cosmic_text;
-pub use ctx::*;
+pub use ctx::{TextContext, Kek};
 pub use id::Id;
-pub use math::*;
+pub use math::{Point, Rect};
 pub use style::*;
-pub use text::*;
-pub use action::*;
-pub use state::*;
+pub use text::{TextManager, GlyphPosition};
+pub use action::{Action, ActionResult};
+pub use state::{TextState, Selection, SelectionLine};
 
 #[cfg(test)]
 mod tests {

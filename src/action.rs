@@ -16,5 +16,7 @@ pub enum Action {
 
 pub enum ActionResult {
     None,
+    CursorUpdated,
+    TextChanged,
     InsertToClipboard(String),
 }
