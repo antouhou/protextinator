@@ -363,10 +363,15 @@ impl TextState {
         self.text_area = text_area.into();
         self.text_style = text_style;
 
-        self.recalculate(ctx, reshape);
+        self.recalculate(ctx, reshape, UpdateReason::Unknown);
     }
 
-    pub fn recalculate(&mut self, ctx: &mut TextContext, reshape: bool) {
+    pub fn recalculate(
+        &mut self,
+        ctx: &mut TextContext,
+        reshape: bool,
+        update_reason: UpdateReason,
+    ) {
         let text_area = self.text_area;
         let text_buffer_id = self.text_buffer_id;
 
@@ -377,7 +382,12 @@ impl TextState {
             .buffer_no_retain_mut(&text_buffer_id)
             .unwrap();
 
-        self.recalculate_caret_position_and_scroll(text_area, buffer, &mut ctx.font_system);
+        self.recalculate_caret_position_and_scroll(
+            text_area,
+            buffer,
+            &mut ctx.font_system,
+            update_reason,
+        );
         self.update_buffer_size_to_match_element(buffer, text_area, &mut ctx.font_system);
         self.recalculate_selection_area(buffer, &mut ctx.font_system);
     }
@@ -412,6 +422,7 @@ impl TextState {
         text_area: Rect,
         buffer: &mut Buffer,
         font_system: &mut FontSystem,
+        update_reason: UpdateReason,
     ) -> Option<()> {
         let caret_position =
             calculate_caret_position_pt(buffer, self.cursor_before_glyph, &self.text, font_system)?;
@@ -456,9 +467,29 @@ impl TextState {
         // If caret is within the visible text area, we don't need to scroll.
         //  In that case, we should return the old scroll and modify the caret offset
         if is_new_caret_visible {
-            // Do not do anything with the scroll, convert caret to relative
-            new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
-            new_scroll.horizontal = old_scroll.horizontal;
+            // Check if we should implement improved scroll behavior for overflowing text
+            let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
+                buffer,
+                text_area_width,
+                current_relative_caret_offset,
+                new_absolute_caret_offset,
+                old_scroll.horizontal,
+            );
+
+            let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
+
+            if should_update_horizontal_scroll && !is_moving_caret {
+                // Improved behavior: keep caret visually fixed, adjust scroll accordingly
+                // We want: new_absolute_caret_offset = new_scroll.horizontal + new_relative_caret_offset
+                // Since we want to keep new_relative_caret_offset = current_relative_caret_offset
+                // We get: new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset
+                new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset;
+                new_relative_caret_offset = current_relative_caret_offset; // Keep caret visually fixed
+            } else {
+                // Standard behavior: Do not do anything with the scroll, convert caret to relative
+                new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
+                new_scroll.horizontal = old_scroll.horizontal;
+            }
         } else if new_absolute_caret_offset > max {
             new_scroll = Scroll::new(
                 0,
@@ -490,6 +521,58 @@ impl TextState {
         None
     }
 
+    /// Determines if we should use improved scroll behavior where the caret stays visually
+    /// fixed while deleting overflowing text, instead of moving the caret within the visible area.
+    ///
+    /// This behavior is used when:
+    /// 1. Text overflows the visible area (text is longer than area width)
+    /// 2. We're likely deleting from the end (caret moved to the left)
+    /// 3. There's horizontal scroll present
+    fn should_update_horizontal_scroll(
+        &self,
+        buffer: &Buffer,
+        text_area_width: f32,
+        old_relative_caret_x: f32,
+        new_absolute_caret_x: f32,
+        current_scroll_x: f32,
+    ) -> bool {
+        // Only apply improved behavior when there's existing scroll
+        if current_scroll_x <= 0.0 {
+            return false;
+        }
+
+        // Calculate approximate text width based on buffer content
+        let text_overflows = self.estimate_text_overflows(buffer, text_area_width);
+        if !text_overflows {
+            return false;
+        }
+
+        // Check if caret moved to the left (likely deletion from end)
+        let old_absolute_caret_x = old_relative_caret_x + current_scroll_x;
+        let caret_moved_left = new_absolute_caret_x < old_absolute_caret_x;
+
+        // Use improved behavior when text overflows and caret moved left
+        caret_moved_left
+    }
+
+    /// Estimates if text overflows the given width by examining the buffer's layout
+    fn estimate_text_overflows(&self, buffer: &Buffer, text_area_width: f32) -> bool {
+        // Look at the last glyph position to estimate if text overflows
+        if let Some(line) = buffer.lines.last() {
+            if let Some(layouts) = line.layout_opt().as_ref() {
+                if let Some(layout) = layouts.last() {
+                    if let Some(last_glyph) = layout.glyphs.last() {
+                        let text_width = last_glyph.x + last_glyph.w;
+                        return text_width > text_area_width;
+                    }
+                }
+            }
+        }
+
+        // Fallback: assume no overflow if we can't determine
+        false
+    }
+
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
         ctx.text_manager
             .buffer_no_retain(&self.text_buffer_id)
@@ -512,20 +595,20 @@ impl TextState {
             self.reset_selection_end();
         }
 
-        self.recalculate(ctx, true);
+        self.recalculate(ctx, true, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
     fn select_all_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.select_all();
-        self.recalculate(ctx, false);
+        self.recalculate(ctx, false, UpdateReason::SelectionChanged);
         ActionResult::CursorUpdated
     }
 
     fn cut_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("".to_string());
         self.remove_selected_text();
-        self.recalculate(ctx, true);
+        self.recalculate(ctx, true, UpdateReason::DeletedTextAtCursor);
         ActionResult::InsertToClipboard(selected_text)
     }
 
@@ -538,14 +621,14 @@ impl TextState {
         } else {
             self.remove_char_at_cursor();
         }
-        self.recalculate(ctx, true);
+        self.recalculate(ctx, true, UpdateReason::DeletedTextAtCursor);
         ActionResult::TextChanged
     }
 
     fn insert_whitespace_at_cursor(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.insert_char_at_cursor(' ');
         self.reset_selection();
-        self.recalculate(ctx, true);
+        self.recalculate(ctx, true, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
@@ -556,7 +639,7 @@ impl TextState {
             self.move_cursor_right();
         }
         self.reset_selection();
-        self.recalculate(ctx, false);
+        self.recalculate(ctx, false, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -567,7 +650,7 @@ impl TextState {
             self.move_cursor_left();
         }
         self.reset_selection();
-        self.recalculate(ctx, false);
+        self.recalculate(ctx, false, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -585,7 +668,7 @@ impl TextState {
             self.reset_selection_end();
         }
 
-        self.recalculate(ctx, true);
+        self.recalculate(ctx, true, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
@@ -631,7 +714,7 @@ impl TextState {
             )?;
             let char_index = cursor_to_char_index(self.text(), glyph_cursor)?;
             self.move_cursor_to(char_index);
-            self.recalculate(text_context, false);
+            self.recalculate(text_context, false, UpdateReason::MoveCaret);
         }
 
         None
@@ -674,7 +757,7 @@ impl TextState {
                 }
             }
 
-            self.recalculate(ctx, false);
+            self.recalculate(ctx, false, UpdateReason::MoveCaret);
         }
 
         None
@@ -718,4 +801,12 @@ fn cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
 
     // If cursor.line is beyond the available lines
     None
+}
+
+pub enum UpdateReason {
+    SelectionChanged,
+    InsertedText,
+    MoveCaret,
+    DeletedTextAtCursor,
+    Unknown,
 }
