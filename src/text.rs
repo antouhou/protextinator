@@ -4,9 +4,7 @@ use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use cosmic_text::{
-    Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping,
-};
+use cosmic_text::{Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping};
 
 #[derive(Default)]
 pub struct TextManager {
@@ -46,11 +44,6 @@ impl TextManager {
     pub fn end_frame(&mut self) {
         self.buffer_cache
             .retain(|id, _| self.buffers_accessed_last_frame.contains(id));
-        #[cfg(feature = "profiling")]
-        log::debug!(
-            "Text buffer cache size on the end of the frame: {}",
-            self.buffer_cache.len()
-        );
     }
 
     pub fn buffer(&mut self, id: &Id) -> Option<&Buffer> {

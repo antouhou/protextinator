@@ -45,7 +45,7 @@ pub struct TextState {
     pub scroll_interval: Duration,
 
     pub text_style: TextStyle,
-    text_area: Rect,
+    pub text_area: Rect,
     pub(crate) text_buffer_id: Id,
     pub caret_width: f32,
 
@@ -372,13 +372,12 @@ impl TextState {
 
         self.shape_if_not_shaped(text_buffer_id, text_area, ctx, reshape);
 
-        let buffer = ctx.text_manager.buffer_no_retain_mut(&text_buffer_id).unwrap();
+        let buffer = ctx
+            .text_manager
+            .buffer_no_retain_mut(&text_buffer_id)
+            .unwrap();
 
-        self.recalculate_caret_position_and_scroll(
-            text_area,
-            buffer,
-            &mut ctx.font_system,
-        );
+        self.recalculate_caret_position_and_scroll(text_area, buffer, &mut ctx.font_system);
         self.update_buffer_size_to_match_element(buffer, text_area, &mut ctx.font_system);
         self.recalculate_selection_area(buffer, &mut ctx.font_system);
     }
@@ -459,7 +458,7 @@ impl TextState {
         if is_new_caret_visible {
             // Do not do anything with the scroll, convert caret to relative
             new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
-            new_scroll.horizontal = 0.0;
+            new_scroll.horizontal = old_scroll.horizontal;
         } else if new_absolute_caret_offset > max {
             new_scroll = Scroll::new(
                 0,
@@ -492,14 +491,16 @@ impl TextState {
     }
 
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
-        ctx.text_manager.buffer_no_retain(&self.text_buffer_id).is_none()
+        ctx.text_manager
+            .buffer_no_retain(&self.text_buffer_id)
+            .is_none()
     }
 
     pub fn size_changed(&self, text_area: (f32, f32)) -> bool {
         self.text_area.size() != text_area
     }
 
-    fn copy_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
+    fn copy_selected_text(&mut self) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("".to_string());
         ActionResult::InsertToClipboard(selected_text)
     }
@@ -570,7 +571,11 @@ impl TextState {
         ActionResult::CursorUpdated
     }
 
-    fn insert_character_before_cursor(&mut self, character: &SmolStr, ctx: &mut TextContext) -> ActionResult {
+    fn insert_character_before_cursor(
+        &mut self,
+        character: &SmolStr,
+        ctx: &mut TextContext,
+    ) -> ActionResult {
         if self.is_text_selected() {
             self.move_cursor_left();
             self.remove_selected_text();
@@ -584,25 +589,23 @@ impl TextState {
         ActionResult::TextChanged
     }
 
-    pub fn apply_action(
-        &mut self,
-        ctx: &mut TextContext,
-        action: &Action,
-    ) -> ActionResult {
+    pub fn apply_action(&mut self, ctx: &mut TextContext, action: &Action) -> ActionResult {
         if self.is_editable && self.is_selectable {
             match action {
-                Action::Paste(text) => self.paste_text_at_cursor(ctx, &text),
+                Action::Paste(text) => self.paste_text_at_cursor(ctx, text),
                 Action::Cut => self.cut_selected_text(ctx),
                 Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
                 Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
                 Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                 Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
-                Action::InsertChar(character) => self.insert_character_before_cursor(&character, ctx),
+                Action::InsertChar(character) => {
+                    self.insert_character_before_cursor(character, ctx)
+                }
                 _ => ActionResult::None,
             }
         } else if self.is_selectable {
             match action {
-                Action::Copy => self.copy_selected_text(ctx),
+                Action::Copy => self.copy_selected_text(),
                 Action::SelectAll => self.select_all_recalculate(ctx),
                 _ => ActionResult::None,
             }
@@ -644,11 +647,8 @@ impl TextState {
         let text_manager = &mut ctx.text_manager;
         let font_system = &mut ctx.font_system;
         if self.is_selectable {
-            let glyph_cursor = text_manager.glyph_under_position(
-                self,
-                font_system,
-                pointer_relative_position,
-            )?;
+            let glyph_cursor =
+                text_manager.glyph_under_position(self, font_system, pointer_relative_position)?;
 
             let char_index_under_position = cursor_to_char_index(self.text(), glyph_cursor)?;
 

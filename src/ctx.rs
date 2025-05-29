@@ -1,4 +1,4 @@
-use crate::state::{TextState};
+use crate::state::TextState;
 use crate::{Id, Point, TextManager};
 use ahash::HashMap;
 use cosmic_text::{fontdb, FontSystem, SwashCache};
@@ -55,7 +55,7 @@ impl Kek {
         } else {
             // TODO: print warning
         }
-        
+
         None
     }
 }
