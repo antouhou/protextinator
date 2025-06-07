@@ -31,7 +31,7 @@ impl Kek {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
             state.handle_click(text_manager, click_position_relative.into());
-            state.is_focused = true;
+            state.is_editing = true;
         } else {
             //TODO: print warning
         }

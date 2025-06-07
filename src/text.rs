@@ -84,7 +84,7 @@ impl TextManager {
     ) -> Option<Cursor> {
         let buffer = self.buffer_no_retain_mut(&state.text_buffer_id)?;
         let horizontal_scroll = buffer.scroll().horizontal;
-        let cursor = buffer.hit(
+        let byte_offset_cursor = buffer.hit(
             interaction_position_relative_to_element.x + horizontal_scroll,
             interaction_position_relative_to_element.y,
         )?;
@@ -92,7 +92,7 @@ impl TextManager {
         // TODO: cursor doesn't seem to correctly detect hit to the left of the line,
         //  so there's a little hack to detect if it is to the left of the line's first glyph
         // ======== Check that click isn't to the left of the line's first glyph =========
-        let layout_cursor = buffer.layout_cursor(font_system, cursor)?;
+        let layout_cursor = buffer.layout_cursor(font_system, byte_offset_cursor)?;
 
         let first_glyph_on_line_cursor = LayoutCursor {
             line: layout_cursor.line,
@@ -107,8 +107,8 @@ impl TextManager {
         if let Some(position) = position_of_first_glyph {
             if interaction_position_relative_to_element.x < position.x {
                 let first_glyph_cursor = Cursor {
-                    line: cursor.line,
-                    index: cursor.index.saturating_sub(layout_cursor.glyph),
+                    line: byte_offset_cursor.line,
+                    index: byte_offset_cursor.index.saturating_sub(layout_cursor.glyph),
                     affinity: Default::default(),
                 };
                 return Some(first_glyph_cursor);
@@ -116,7 +116,7 @@ impl TextManager {
         }
         // ================================================================================
 
-        Some(cursor)
+        Some(byte_offset_cursor)
     }
 
     pub fn get_position_of_a_glyph(
@@ -225,7 +225,7 @@ impl TextManager {
         buffer.set_text(
             font_system,
             text,
-            Attrs::new()
+            &Attrs::new()
                 .color(font_color.into())
                 .family(font_family.to_fontdb_family())
                 .metadata(buffer_id.0 as usize),
@@ -278,29 +278,6 @@ pub(crate) fn vertical_offset(
     }
 }
 
-/// Removes a character from a string at the specified index. Returns the new amount of characters in the string.
-pub fn remove_character_at(string: &mut String, index: usize) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index < chars.len() {
-        chars.remove(index);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-pub fn remove_multiple_characters_at(string: &mut String, index: usize, count: usize) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index < chars.len() {
-        chars.drain(index..index + count);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
 /// Inserts a character into a string at the specified index. Returns the new amount of characters in the string.
 pub fn insert_character_at(string: &mut String, index: usize, character: char) -> usize {
     let mut chars: Vec<char> = string.chars().collect();
@@ -325,17 +302,17 @@ pub fn insert_multiple_characters_at(string: &mut String, index: usize, characte
     len
 }
 
-pub fn char_index_to_cursor(full_text: &str, char_index: usize) -> Option<Cursor> {
+pub fn char_index_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
     let mut cumulative = 0;
     let mut line_heh = None;
     let mut char_heh = None;
     // Iterator over lines
     for (line_number, line) in full_text.lines().enumerate() {
-        let line_len = line.chars().count();
+        let line_len = line.len();
         // Check if char_index is in the current line.
-        if char_index < cumulative + line_len {
+        if char_byte_offset < cumulative + line_len {
             line_heh = Some(line_number);
-            char_heh = Some(char_index.saturating_sub(cumulative));
+            char_heh = Some(char_byte_offset.saturating_sub(cumulative));
             break;
         }
         // Add one for the newline character removed by .lines()
@@ -366,8 +343,56 @@ pub fn char_index_to_layout_cursor(
     text: &str,
     char_index: usize,
 ) -> Option<LayoutCursor> {
-    let cursor = char_index_to_cursor(text, char_index)?;
+    let char_byte_offset = char_index_to_byte_offset(text, char_index)?;
+    let cursor = char_index_to_cursor(text, char_byte_offset)?;
     buffer.layout_cursor(font_system, cursor)
+}
+
+pub fn char_index_to_byte_offset(text: &str, char_index: usize) -> Option<usize> {
+    if char_index > text.chars().count() {
+        return None;
+    }
+
+    let mut current_char_index = 0;
+    for (byte_offset, _) in text.char_indices() {
+        if current_char_index == char_index {
+            return Some(byte_offset);
+        }
+        current_char_index += 1;
+    }
+
+    // Handle the case where char_index is exactly at the end of the string
+    if char_index == text.chars().count() {
+        return Some(text.len());
+    }
+
+    None
+}
+
+pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Option<usize> {
+    if char_byte_offset > text.len() {
+        return None;
+    }
+
+    // If the byte offset is at the end of the string, return the character count
+    if char_byte_offset == text.len() {
+        return Some(text.chars().count());
+    }
+
+    // Count characters until we reach the specified byte offset
+    let mut char_index = 0;
+    for (byte_offset, _) in text.char_indices() {
+        if byte_offset == char_byte_offset {
+            return Some(char_index);
+        }
+        if byte_offset > char_byte_offset {
+            // The byte offset is not at a character boundary
+            return None;
+        }
+        char_index += 1;
+    }
+
+    None
 }
 
 pub(crate) fn calculate_caret_position_pt(
@@ -472,7 +497,7 @@ pub fn count_lines_before_cursor(buffer: &Buffer, cursor: LayoutCursor) -> usize
             break;
         }
 
-        let layouts = line.layout_opt().as_ref().unwrap();
+        let layouts = line.layout_opt().unwrap();
         for (j, _layout) in layouts.iter().enumerate() {
             if j < cursor.layout {
                 lines_counted += 1;

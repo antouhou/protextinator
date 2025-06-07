@@ -16,7 +16,7 @@ default = []
 serialization = ["dep:serde"]
 
 [dependencies]
-cosmic-text = "0.12"
+cosmic-text = "0.14"
 ahash = "0.8.12"
 log = "0.4.27"
 smol_str = "0.3"
