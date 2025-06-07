@@ -302,7 +302,7 @@ pub fn insert_multiple_characters_at(string: &mut String, index: usize, characte
     len
 }
 
-pub fn char_index_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
+pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
     let mut cumulative = 0;
     let mut line_heh = None;
     let mut char_heh = None;
@@ -344,7 +344,7 @@ pub fn char_index_to_layout_cursor(
     char_index: usize,
 ) -> Option<LayoutCursor> {
     let char_byte_offset = char_index_to_byte_offset(text, char_index)?;
-    let cursor = char_index_to_cursor(text, char_byte_offset)?;
+    let cursor = char_byte_offset_to_cursor(text, char_byte_offset)?;
     buffer.layout_cursor(font_system, cursor)
 }
 

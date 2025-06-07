@@ -1,13 +1,9 @@
 use crate::action::{Action, ActionResult};
 use crate::ctx::TextContext;
 use crate::style::{TextAlignment, TextStyle};
-use crate::text::{
-    buffer_height, calculate_caret_position_pt, char_byte_offset_to_char_index,
-    char_index_to_layout_cursor, insert_character_at, insert_multiple_characters_at,
-    vertical_offset,
-};
+use crate::text::{buffer_height, calculate_caret_position_pt, char_byte_offset_to_char_index, char_byte_offset_to_cursor, char_index_to_byte_offset, char_index_to_layout_cursor, insert_character_at, insert_multiple_characters_at, vertical_offset};
 use crate::{Id, Point, Rect};
-use cosmic_text::{Buffer, Cursor, FontSystem, Scroll};
+use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
 
@@ -696,6 +692,35 @@ impl TextState {
         self.recalculate(ctx, false, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
+    
+    fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
+        let Some(buffer) = ctx.text_manager.buffer_no_retain_mut(&self.text_buffer_id) else {
+            return ActionResult::None;
+        };
+
+        let Some(byte_offset) = char_index_to_byte_offset(&self.text, self.cursor_before_glyph) else {
+            return ActionResult::None;
+        };
+        
+        let Some(cursor) = char_byte_offset_to_cursor(&self.text, byte_offset) else {
+            return ActionResult::None;
+        };
+
+        let mut edit = Editor::new(buffer);
+        edit.set_cursor(cursor);
+        edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
+        
+        let new_cursor = edit.cursor();
+        let Some(new_char) = byte_offset_cursor_to_char_index(&self.text, new_cursor) else {
+            return ActionResult::None;
+        };
+        
+        self.reset_selection();
+        self.move_cursor_to(new_char);
+        self.recalculate(ctx, false, UpdateReason::MoveCaret);
+        
+        ActionResult::CursorUpdated
+    }
 
     fn insert_character_before_cursor(
         &mut self,
@@ -724,6 +749,8 @@ impl TextState {
                 Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
                 Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                 Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
+                Action::MoveCursorUp => self.move_cursor(ctx, Motion::Up),
+                Action::MoveCursorDown => self.move_cursor(ctx, Motion::Down),
                 Action::InsertChar(character) => {
                     self.insert_character_before_cursor(character, ctx)
                 }
