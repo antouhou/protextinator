@@ -1,9 +1,13 @@
 use crate::action::{Action, ActionResult};
 use crate::ctx::TextContext;
 use crate::style::{TextAlignment, TextStyle};
-use crate::text::{buffer_height, calculate_caret_position_pt, char_byte_offset_to_char_index, char_index_to_layout_cursor, insert_character_at, insert_multiple_characters_at, vertical_offset};
+use crate::text::{
+    buffer_height, calculate_caret_position_pt, char_byte_offset_to_char_index,
+    char_index_to_layout_cursor, insert_character_at, insert_multiple_characters_at,
+    vertical_offset,
+};
 use crate::{Id, Point, Rect};
-use cosmic_text::{Buffer, Cursor, FontSystem, LayoutCursor, Scroll};
+use cosmic_text::{Buffer, Cursor, FontSystem, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
 
@@ -101,9 +105,24 @@ impl TextState {
         self.cursor_before_glyph += 1;
         ActionResult::TextChanged
     }
-    
-    pub fn move_cursor_by(&mut self, offset: usize) {
-        self.cursor_before_glyph += offset;
+
+    pub fn move_cursor_forward_by(&mut self, offset: usize) {
+        let new_value = self.cursor_before_glyph.saturating_add(offset);
+
+        if new_value > self.text_size {
+            self.cursor_before_glyph = self.text_size;
+        } else {
+            self.cursor_before_glyph = new_value;
+        }
+    }
+
+    pub fn move_cursor_back_by(&mut self, offset: usize) {
+        let new_value = self.cursor_before_glyph.saturating_sub(offset);
+        if new_value > self.text_size {
+            self.cursor_before_glyph = self.text_size;
+        } else {
+            self.cursor_before_glyph = new_value;
+        }
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
@@ -111,17 +130,17 @@ impl TextState {
         self.text_size =
             insert_multiple_characters_at(&mut self.text, self.cursor_before_glyph, text);
         let move_cursor_by = self.text_size - old_text_size;
-        self.move_cursor_by(move_cursor_by);
+        self.move_cursor_forward_by(move_cursor_by);
         self.text_size
     }
 
     pub fn remove_char_at_cursor(&mut self) {
         if !self.text.is_empty() && self.cursor_before_glyph > 0 {
             self.remove_character_at(self.cursor_before_glyph - 1);
-            self.move_cursor_by(1);
+            self.move_cursor_back_by(1);
         }
     }
-    
+
     pub fn remove_multiple_characters_at(&mut self, index: usize, count: usize) {
         let mut chars: Vec<char> = self.text.chars().collect();
         let mut len = chars.len();
@@ -132,7 +151,7 @@ impl TextState {
         }
         self.text_size = len;
     }
-    
+
     pub fn remove_character_at(&mut self, index: usize) {
         let mut chars: Vec<char> = self.text.chars().collect();
         let mut len = chars.len();
@@ -301,8 +320,7 @@ impl TextState {
             selection_starts_at_index,
         )?;
         let end_cursor =
-            char_index_to_layout_cursor(
-                buffer, font_system, &self.text, selection_end_char_index)?;
+            char_index_to_layout_cursor(buffer, font_system, &self.text, selection_end_char_index)?;
 
         self.selection.lines.clear();
 
@@ -449,8 +467,6 @@ impl TextState {
     ) -> Option<()> {
         let caret_position_relative_to_buffer =
             calculate_caret_position_pt(buffer, self.cursor_before_glyph, &self.text, font_system)?;
-        
-        println!("Caret_pos: {:?}", caret_position_relative_to_buffer);
 
         let current_relative_caret_offset = self.relative_caret_offset_horizontal;
         let old_scroll = self.scroll;
@@ -459,30 +475,28 @@ impl TextState {
         let vertical_scroll_to_align_text =
             calculate_vertical_offset(&self.text_style, text_area, buffer);
 
-        let new_absolute_caret_offset = if let Some(absolute_caret_offset) = caret_position_relative_to_buffer.x {
-            // Not an empty line
-            absolute_caret_offset
-        } else {
-            let container_alignment = self.text_style.horizontal_alignment;
-            // This means that this is an empty line, and the caret should be aligned to according
-            //  to the horizontal text alignment
-            match container_alignment {
-                TextAlignment::Start => 0.0,
-                TextAlignment::End => text_area_width,
-                TextAlignment::Center => text_area_width / 2.0,
-                // TODO: check that implementations after this are actually correct
-                TextAlignment::Left => 0.0,
-                TextAlignment::Right => text_area_width,
-                TextAlignment::Justify => 0.0,
-            }
-        };
-        
-        println!("abs: {}", new_absolute_caret_offset);
+        let new_absolute_caret_offset =
+            if let Some(absolute_caret_offset) = caret_position_relative_to_buffer.x {
+                // Not an empty line
+                absolute_caret_offset
+            } else {
+                let container_alignment = self.text_style.horizontal_alignment;
+                // This means that this is an empty line, and the caret should be aligned to according
+                //  to the horizontal text alignment
+                match container_alignment {
+                    TextAlignment::Start => 0.0,
+                    TextAlignment::End => text_area_width,
+                    TextAlignment::Center => text_area_width / 2.0,
+                    // TODO: check that implementations after this are actually correct
+                    TextAlignment::Left => 0.0,
+                    TextAlignment::Right => text_area_width,
+                    TextAlignment::Justify => 0.0,
+                }
+            };
 
         // TODO: A little hack to set horizontal scroll
         let mut new_scroll = old_scroll;
         let mut new_relative_caret_offset = current_relative_caret_offset;
-        println!("Current relative offset: {}", current_relative_caret_offset);
 
         let current_absolute_visible_text_area = (
             old_scroll.horizontal,
@@ -492,10 +506,6 @@ impl TextState {
         let max = current_absolute_visible_text_area.1;
         let is_new_caret_visible =
             new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
-        
-        println!("Text area width: {}", text_area_width);
-        println!("Min: {}, Max: {}", min, max);
-        println!("Is new caret visible: {is_new_caret_visible}");
 
         // If caret is within the visible text area, we don't need to scroll.
         //  In that case, we should return the old scroll and modify the caret offset
@@ -541,8 +551,6 @@ impl TextState {
             // Do nothing?
         }
 
-        println!("New relative offset: {}", new_relative_caret_offset);
-
         new_scroll.vertical = vertical_scroll_to_align_text;
         buffer.set_scroll(new_scroll);
         self.scroll = new_scroll;
@@ -550,7 +558,6 @@ impl TextState {
         let mut vertical_offset = vertical_scroll_to_align_text * -1.0;
         vertical_offset += caret_position_relative_to_buffer.line as f32 * line_height;
 
-        println!("Setting horizontal offset to: {}", new_relative_caret_offset);
         self.relative_caret_offset_horizontal = new_relative_caret_offset;
         self.relative_caret_offset_vertical = vertical_offset;
 
@@ -585,10 +592,10 @@ impl TextState {
 
         // Check if caret moved to the left (likely deletion from end)
         let old_absolute_caret_x = old_relative_caret_x + current_scroll_x;
-        let caret_moved_left = new_absolute_caret_x < old_absolute_caret_x;
+        
 
         // Use improved behavior when text overflows and caret moved left
-        caret_moved_left
+        new_absolute_caret_x < old_absolute_caret_x
     }
 
     /// Estimates if text overflows the given width by examining the buffer's layout
@@ -750,8 +757,6 @@ impl TextState {
                 click_position_relative_to_area,
             )?;
             let char_index = byte_offset_cursor_to_char_index(self.text(), byte_offset_cursor)?;
-            println!("Cursor: {:?}", byte_offset_cursor);
-            println!("Char index: {}", char_index);
             self.move_cursor_to(char_index);
             self.recalculate(text_context, false, UpdateReason::MoveCaret);
         }
@@ -772,7 +777,8 @@ impl TextState {
             let glyph_cursor =
                 text_manager.glyph_under_position(self, font_system, pointer_relative_position)?;
 
-            let char_index_under_position = byte_offset_cursor_to_char_index(self.text(), glyph_cursor)?;
+            let char_index_under_position =
+                byte_offset_cursor_to_char_index(self.text(), glyph_cursor)?;
 
             if let Some(origin) = self.selection.origin_character_index {
                 if char_index_under_position != origin {

@@ -1,8 +1,11 @@
+use crate::{
+    FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap,
+    VerticalTextAlignment,
+};
 use cosmic_text::Color;
-use crate::{FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap, VerticalTextAlignment};
 
-mod serialization;
 mod caret_positioning;
+mod serialization;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {

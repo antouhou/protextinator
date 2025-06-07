@@ -4,9 +4,9 @@ mod id;
 pub mod math;
 mod state;
 mod style;
-mod text;
 #[cfg(test)]
 mod tests;
+mod text;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;

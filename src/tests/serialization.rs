@@ -1,4 +1,3 @@
-
 #[cfg(feature = "serialization")]
 #[test]
 fn test_font_color_serialization() {
@@ -8,8 +7,7 @@ fn test_font_color_serialization() {
     let original_color = FontColor(Color::rgba(255, 128, 64, 32));
 
     // Serialize to JSON
-    let serialized =
-        serde_json::to_string(&original_color).expect("Failed to serialize FontColor");
+    let serialized = serde_json::to_string(&original_color).expect("Failed to serialize FontColor");
 
     // Deserialize back
     let deserialized: FontColor =
@@ -36,8 +34,7 @@ fn test_text_style_serialization() {
     };
 
     // Serialize to JSON
-    let serialized =
-        serde_json::to_string(&original_style).expect("Failed to serialize TextStyle");
+    let serialized = serde_json::to_string(&original_style).expect("Failed to serialize TextStyle");
 
     // Deserialize back
     let deserialized: TextStyle =

@@ -353,12 +353,10 @@ pub fn char_index_to_byte_offset(text: &str, char_index: usize) -> Option<usize>
         return None;
     }
 
-    let mut current_char_index = 0;
-    for (byte_offset, _) in text.char_indices() {
+    for (current_char_index, (byte_offset, _)) in text.char_indices().enumerate() {
         if current_char_index == char_index {
             return Some(byte_offset);
         }
-        current_char_index += 1;
     }
 
     // Handle the case where char_index is exactly at the end of the string
@@ -379,9 +377,8 @@ pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Op
         return Some(text.chars().count());
     }
 
-    // Count characters until we reach the specified byte offset
-    let mut char_index = 0;
-    for (byte_offset, _) in text.char_indices() {
+    // Iterate over characters until we find a required byte offset
+    for (char_index, (byte_offset, _)) in text.char_indices().enumerate() {
         if byte_offset == char_byte_offset {
             return Some(char_index);
         }
@@ -389,7 +386,6 @@ pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Op
             // The byte offset is not at a character boundary
             return None;
         }
-        char_index += 1;
     }
 
     None
