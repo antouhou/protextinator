@@ -76,17 +76,17 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.cursor_before_glyph.char_index(text_state.text()), Some(0));
     assert_eq!(text_state.relative_caret_offset_horizontal, 0.0);
 
-    // let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
-    // assert!(matches!(result, ActionResult::CursorUpdated));
-    // assert_eq!(text_state.text_size(), 10);
-    // assert_eq!(text_state.cursor_before_glyph, 1);
-    // assert_eq!(text_state.relative_caret_offset_horizontal, mono_width * 1.0);
-    //
-    // let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
-    // assert!(matches!(result, ActionResult::CursorUpdated));
-    // assert_eq!(text_state.text_size(), 10);
-    // assert_eq!(text_state.cursor_before_glyph, 2);
-    // assert_eq!(text_state.relative_caret_offset_horizontal, mono_width * 2.0);
+    let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
+    assert!(matches!(result, ActionResult::CursorUpdated));
+    assert_eq!(text_state.text_size(), 10);
+    assert_eq!(text_state.cursor_before_glyph.char_index(text_state.text()), Some(1));
+    assert_eq!(text_state.relative_caret_offset_horizontal, mono_width * 1.0);
+    
+    let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
+    assert!(matches!(result, ActionResult::CursorUpdated));
+    assert_eq!(text_state.text_size(), 10);
+    assert_eq!(text_state.cursor_before_glyph.char_index(text_state.text()), Some(2));
+    assert_eq!(text_state.relative_caret_offset_horizontal, mono_width * 2.0);
 
     text_state.handle_click(&mut ctx, Point { x: 25.0, y: 10.0 });
     assert_eq!(text_state.cursor_before_glyph.char_index(text_state.text()), Some(3));

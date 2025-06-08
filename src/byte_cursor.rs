@@ -122,25 +122,6 @@ pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> O
     }
 }
 
-pub fn char_index_to_byte_offset(text: &str, char_index: usize) -> Option<usize> {
-    if char_index > text.chars().count() {
-        return None;
-    }
-
-    for (current_char_index, (byte_offset, _)) in text.char_indices().enumerate() {
-        if current_char_index == char_index {
-            return Some(byte_offset);
-        }
-    }
-
-    // Handle the case where char_index is exactly at the end of the string
-    if char_index == text.chars().count() {
-        return Some(text.len());
-    }
-
-    None
-}
-
 pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Option<usize> {
     if char_byte_offset > text.len() {
         return None;
@@ -179,12 +160,6 @@ fn previous_char_byte_offset(text: &str, current: usize) -> Option<usize> {
         .char_indices()
         .last()
         .map(|(byte_idx, _ch)| byte_idx)
-}
-
-fn byte_offset_cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
-    byte_offset_cursor_to_byte_offset(string, cursor).map(|byte_offset| {
-        char_byte_offset_to_char_index(string, byte_offset).unwrap_or(string.len())
-    })
 }
 
 fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {

@@ -279,30 +279,6 @@ pub(crate) fn vertical_offset(
     }
 }
 
-/// Inserts a character into a string at the specified index. Returns the new amount of characters in the string.
-pub fn insert_character_at(string: &mut String, index: usize, character: char) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index <= chars.len() {
-        chars.insert(index, character);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-pub fn insert_multiple_characters_at(string: &mut String, index: usize, characters: &str) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let inserted_chars: Vec<char> = characters.chars().collect();
-    let mut len = chars.len();
-    if index <= chars.len() {
-        chars.splice(index..index, inserted_chars);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct CaretPosition {
     /// The x position of the caret. `None` means that this is an empty line.
@@ -316,16 +292,8 @@ pub(crate) fn calculate_caret_position_pt(
     text: &str,
     font_system: &mut FontSystem,
 ) -> Option<CaretPosition> {
-    // let maybe_next_glyph_cursor =
-    //     char_index_to_layout_cursor(buffer, font_system, text, next_char_byte_cursor);
     let maybe_next_glyph_cursor = next_char_byte_cursor.layout_cursor(buffer, font_system);
-    // let previous_char_index = next_char_byte_cursor.saturating_sub(1);
-    
-    // let previous_char_byte_offset = previous_char_byte_offset(text, next_char_byte_offset)?;
-    // let previous_char_byte_offset_cursor =
-    //     char_byte_offset_to_cursor(text, previous_char_byte_offset)?;
     let previous_glyph_cursor = next_char_byte_cursor.prev_char_cursor(text)?.layout_cursor(buffer, font_system)?;
-        // buffer.layout_cursor(font_system, previous_char_byte_offset_cursor)?;
     
     let maybe_previous_glyph_position =
         TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, previous_glyph_cursor);
