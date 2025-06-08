@@ -1,12 +1,11 @@
+use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect};
 use crate::state::TextState;
 use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use cosmic_text::{
-    Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping,
-};
+use cosmic_text::{Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping};
 
 #[derive(Default)]
 pub struct TextManager {
@@ -46,11 +45,6 @@ impl TextManager {
     pub fn end_frame(&mut self) {
         self.buffer_cache
             .retain(|id, _| self.buffers_accessed_last_frame.contains(id));
-        #[cfg(feature = "profiling")]
-        log::debug!(
-            "Text buffer cache size on the end of the frame: {}",
-            self.buffer_cache.len()
-        );
     }
 
     pub fn buffer(&mut self, id: &Id) -> Option<&Buffer> {
@@ -91,7 +85,7 @@ impl TextManager {
     ) -> Option<Cursor> {
         let buffer = self.buffer_no_retain_mut(&state.text_buffer_id)?;
         let horizontal_scroll = buffer.scroll().horizontal;
-        let cursor = buffer.hit(
+        let byte_offset_cursor = buffer.hit(
             interaction_position_relative_to_element.x + horizontal_scroll,
             interaction_position_relative_to_element.y,
         )?;
@@ -99,7 +93,7 @@ impl TextManager {
         // TODO: cursor doesn't seem to correctly detect hit to the left of the line,
         //  so there's a little hack to detect if it is to the left of the line's first glyph
         // ======== Check that click isn't to the left of the line's first glyph =========
-        let layout_cursor = buffer.layout_cursor(font_system, cursor)?;
+        let layout_cursor = buffer.layout_cursor(font_system, byte_offset_cursor)?;
 
         let first_glyph_on_line_cursor = LayoutCursor {
             line: layout_cursor.line,
@@ -114,8 +108,8 @@ impl TextManager {
         if let Some(position) = position_of_first_glyph {
             if interaction_position_relative_to_element.x < position.x {
                 let first_glyph_cursor = Cursor {
-                    line: cursor.line,
-                    index: cursor.index.saturating_sub(layout_cursor.glyph),
+                    line: byte_offset_cursor.line,
+                    index: byte_offset_cursor.index.saturating_sub(layout_cursor.glyph),
                     affinity: Default::default(),
                 };
                 return Some(first_glyph_cursor);
@@ -123,7 +117,7 @@ impl TextManager {
         }
         // ================================================================================
 
-        Some(cursor)
+        Some(byte_offset_cursor)
     }
 
     pub fn get_position_of_a_glyph(
@@ -232,7 +226,7 @@ impl TextManager {
         buffer.set_text(
             font_system,
             text,
-            Attrs::new()
+            &Attrs::new()
                 .color(font_color.into())
                 .family(font_family.to_fontdb_family())
                 .metadata(buffer_id.0 as usize),
@@ -285,81 +279,6 @@ pub(crate) fn vertical_offset(
     }
 }
 
-/// Removes a character from a string at the specified index. Returns the new amount of characters in the string.
-pub fn remove_character_at(string: &mut String, index: usize) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index < chars.len() {
-        chars.remove(index);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-pub fn remove_multiple_characters_at(string: &mut String, index: usize, count: usize) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index < chars.len() {
-        chars.drain(index..index + count);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-/// Inserts a character into a string at the specified index. Returns the new amount of characters in the string.
-pub fn insert_character_at(string: &mut String, index: usize, character: char) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let mut len = chars.len();
-    if index <= chars.len() {
-        chars.insert(index, character);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-pub fn insert_multiple_characters_at(string: &mut String, index: usize, characters: &str) -> usize {
-    let mut chars: Vec<char> = string.chars().collect();
-    let inserted_chars: Vec<char> = characters.chars().collect();
-    let mut len = chars.len();
-    if index <= chars.len() {
-        chars.splice(index..index, inserted_chars);
-        len = chars.len();
-        *string = chars.into_iter().collect();
-    }
-    len
-}
-
-pub fn char_index_to_cursor(full_text: &str, char_index: usize) -> Option<Cursor> {
-    let mut cumulative = 0;
-    let mut line_heh = None;
-    let mut char_heh = None;
-    // Iterator over lines
-    for (line_number, line) in full_text.lines().enumerate() {
-        let line_len = line.chars().count();
-        // Check if char_index is in the current line.
-        if char_index < cumulative + line_len {
-            line_heh = Some(line_number);
-            char_heh = Some(char_index.saturating_sub(cumulative));
-            break;
-        }
-        // Add one for the newline character removed by .lines()
-        cumulative += line_len + 1;
-    }
-
-    if let (Some(line), Some(index)) = (line_heh, char_heh) {
-        Some(Cursor {
-            line,
-            index,
-            affinity: Default::default(),
-        })
-    } else {
-        None
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct CaretPosition {
     /// The x position of the caret. `None` means that this is an empty line.
@@ -367,27 +286,17 @@ pub struct CaretPosition {
     pub line: usize,
 }
 
-pub fn char_index_to_layout_cursor(
-    buffer: &mut Buffer,
-    font_system: &mut FontSystem,
-    text: &str,
-    char_index: usize,
-) -> Option<LayoutCursor> {
-    let cursor = char_index_to_cursor(text, char_index)?;
-    buffer.layout_cursor(font_system, cursor)
-}
-
 pub(crate) fn calculate_caret_position_pt(
     buffer: &mut Buffer,
-    next_char_index: usize,
+    next_char_byte_cursor: ByteCursor,
     text: &str,
     font_system: &mut FontSystem,
 ) -> Option<CaretPosition> {
-    let maybe_next_glyph_cursor =
-        char_index_to_layout_cursor(buffer, font_system, text, next_char_index);
-    let previous_char_index = next_char_index.saturating_sub(1);
-    let previous_glyph_cursor =
-        char_index_to_layout_cursor(buffer, font_system, text, previous_char_index)?;
+    let maybe_next_glyph_cursor = next_char_byte_cursor.layout_cursor(buffer, font_system);
+    let previous_glyph_cursor = next_char_byte_cursor
+        .prev_char_cursor(text)?
+        .layout_cursor(buffer, font_system)?;
+
     let maybe_previous_glyph_position =
         TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, previous_glyph_cursor);
 
@@ -479,7 +388,7 @@ pub fn count_lines_before_cursor(buffer: &Buffer, cursor: LayoutCursor) -> usize
             break;
         }
 
-        let layouts = line.layout_opt().as_ref().unwrap();
+        let layouts = line.layout_opt().unwrap();
         for (j, _layout) in layouts.iter().enumerate() {
             if j < cursor.layout {
                 lines_counted += 1;

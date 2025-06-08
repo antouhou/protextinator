@@ -1,6 +1,9 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
-use protextinator::{cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager, TextStyle, TextWrap, VerticalTextAlignment};
+use protextinator::{
+    cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager,
+    TextStyle, TextWrap, VerticalTextAlignment,
+};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -120,7 +123,9 @@ impl<'a> App<'a> {
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
+                font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(
+                    0xE5, 0xE5, 0xE5,
+                )), // Light gray
                 overflow: None,
                 horizontal_alignment: protextinator::TextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
@@ -191,7 +196,9 @@ impl<'a> App<'a> {
                 let stats_style = TextStyle {
                     font_size: FontSize(14.0),
                     line_height: LineHeight(1.2),
-                    font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(0x61, 0xAF, 0xEF)), // Light blue
+                    font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(
+                        0x61, 0xAF, 0xEF,
+                    )), // Light blue
                     overflow: None,
                     horizontal_alignment: protextinator::TextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,

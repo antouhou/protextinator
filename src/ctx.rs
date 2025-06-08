@@ -1,4 +1,4 @@
-use crate::state::{TextState};
+use crate::state::TextState;
 use crate::{Id, Point, TextManager};
 use ahash::HashMap;
 use cosmic_text::{fontdb, FontSystem, SwashCache};
@@ -27,11 +27,11 @@ pub struct Kek {
 }
 
 impl Kek {
-    pub fn handle_click(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
+    pub fn handle_press(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
-            state.handle_click(text_manager, click_position_relative.into());
-            state.is_focused = true;
+            state.handle_press(text_manager, click_position_relative.into());
+            state.is_editing = true;
         } else {
             //TODO: print warning
         }
@@ -55,7 +55,7 @@ impl Kek {
         } else {
             // TODO: print warning
         }
-        
+
         None
     }
 }

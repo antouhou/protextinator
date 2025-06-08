@@ -75,7 +75,7 @@ impl Serialize for FontColor {
     where
         S: Serializer,
     {
-        serializer.serialize_u32(self.0.0)
+        serializer.serialize_u32(self.0 .0)
     }
 }
 
@@ -158,24 +158,12 @@ impl FontFamily {
 
     pub fn to_fontdb_family<'a>(&'a self) -> Family<'a> {
         match self {
-            FontFamily::Name(a) => {
-                Family::Name(a)
-            }
-            FontFamily::SansSerif => {
-                Family::SansSerif
-            }
-            FontFamily::Serif => {
-                Family::Serif
-            }
-            FontFamily::Monospace => {
-                Family::Monospace
-            }
-            FontFamily::Cursive => {
-                Family::Cursive
-            }
-            FontFamily::Fantasy => {
-                Family::Fantasy
-            }
+            FontFamily::Name(a) => Family::Name(a),
+            FontFamily::SansSerif => Family::SansSerif,
+            FontFamily::Serif => Family::Serif,
+            FontFamily::Monospace => Family::Monospace,
+            FontFamily::Cursive => Family::Cursive,
+            FontFamily::Fantasy => Family::Fantasy,
         }
     }
 }
@@ -208,15 +196,15 @@ pub enum TextAlignment {
     Justify,
 }
 
-impl Into<Option<Align>> for TextAlignment {
-    fn into(self) -> Option<Align> {
-        match self {
-            Self::Start => None,
-            Self::End => Some(Align::End),
-            Self::Center => Some(Align::Center),
-            Self::Left => Some(Align::Left),
-            Self::Right => Some(Align::Right),
-            Self::Justify => Some(Align::Justified),
+impl From<TextAlignment> for Option<Align> {
+    fn from(val: TextAlignment) -> Self {
+        match val {
+            TextAlignment::Start => None,
+            TextAlignment::End => Some(Align::End),
+            TextAlignment::Center => Some(Align::Center),
+            TextAlignment::Left => Some(Align::Left),
+            TextAlignment::Right => Some(Align::Right),
+            TextAlignment::Justify => Some(Align::Justified),
         }
     }
 }
