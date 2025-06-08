@@ -1,11 +1,14 @@
 use crate::action::{Action, ActionResult};
 use crate::ctx::TextContext;
 use crate::style::{TextAlignment, TextStyle};
-use crate::text::{buffer_height, calculate_caret_position_pt, char_byte_offset_to_char_index, char_byte_offset_to_cursor, char_index_to_byte_offset, char_index_to_layout_cursor, insert_character_at, insert_multiple_characters_at, vertical_offset};
+use crate::text::{
+    buffer_height, calculate_caret_position_pt, vertical_offset,
+};
 use crate::{Id, Point, Rect};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
+use crate::byte_cursor::ByteCursor;
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
@@ -16,8 +19,8 @@ pub struct SelectionLine {
 
 #[derive(Clone, Default, Debug)]
 pub struct Selection {
-    pub origin_character_index: Option<usize>,
-    pub ends_before_character_index: Option<usize>,
+    pub origin_character_byte_cursor: Option<ByteCursor>,
+    pub ends_before_character_byte_cursor: Option<ByteCursor>,
     pub lines: Vec<SelectionLine>,
 }
 
@@ -25,7 +28,8 @@ pub struct TextState {
     pub is_first_run: bool,
     text: String,
 
-    pub cursor_before_glyph: usize,
+    pub cursor_before_glyph: ByteCursor,
+    
     pub relative_caret_offset_horizontal: f32,
     pub relative_caret_offset_vertical: f32,
     pub caret_width: f32,
@@ -58,7 +62,9 @@ impl TextState {
             is_first_run: true,
             text,
             is_editing: false,
-            cursor_before_glyph: 0,
+            
+            cursor_before_glyph: ByteCursor::default(),
+
             relative_caret_offset_horizontal: 0.0,
             relative_caret_offset_vertical: 0.0,
             scroll: Scroll::new(0, 0.0, 0.0),
@@ -79,12 +85,14 @@ impl TextState {
         self.caret_width = width;
     }
 
-    pub fn set_text(&mut self, text: impl Into<String>) {
+    pub fn set_text(&mut self, text: impl Into<String>, ctx: &mut TextContext) {
         self.text = text.into();
         self.text_size = self.text.chars().count();
 
-        if self.cursor_before_glyph > self.text_size {
-            self.cursor_before_glyph = self.text_size;
+        self.shape_if_not_shaped(ctx, false);
+
+        if self.cursor_before_glyph.full_byte_offset > self.text.len() {
+            self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
 
@@ -96,132 +104,110 @@ impl TextState {
         self.text_size
     }
 
-    pub fn insert_char_at_cursor(&mut self, character: char) -> ActionResult {
-        self.text_size = insert_character_at(&mut self.text, self.cursor_before_glyph, character);
-        self.cursor_before_glyph += 1;
+    pub fn insert_char_at_cursor(
+        &mut self,
+        character: char,
+        ctx: &mut TextContext,
+    ) -> ActionResult {
+        self.text.insert(self.cursor_before_glyph.full_byte_offset, character);
+        self.text_size += 1;
+        // TODO: wouldn't it be faster to just use set_byte_offset function here?
+        self.move_cursor(ctx, Motion::Next);
         ActionResult::TextChanged
     }
 
-    pub fn move_cursor_forward_by(&mut self, offset: usize) {
-        let new_value = self.cursor_before_glyph.saturating_add(offset);
-
-        if new_value > self.text_size {
-            self.cursor_before_glyph = self.text_size;
-        } else {
-            self.cursor_before_glyph = new_value;
-        }
-    }
-
-    pub fn move_cursor_back_by(&mut self, offset: usize) {
-        let new_value = self.cursor_before_glyph.saturating_sub(offset);
-        if new_value > self.text_size {
-            self.cursor_before_glyph = self.text_size;
-        } else {
-            self.cursor_before_glyph = new_value;
-        }
-    }
-
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        let old_text_size = self.text_size;
-        self.text_size =
-            insert_multiple_characters_at(&mut self.text, self.cursor_before_glyph, text);
-        let move_cursor_by = self.text_size - old_text_size;
-        self.move_cursor_forward_by(move_cursor_by);
+        self.text.insert_str(self.cursor_before_glyph.full_byte_offset, text);
+        self.text_size = self.text.chars().count();
+        self.update_cursor_before_glyph_with_bytes_offset(self.cursor_before_glyph.full_byte_offset + text.len());
         self.text_size
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.text.is_empty() && self.cursor_before_glyph > 0 {
-            self.remove_character_at(self.cursor_before_glyph - 1);
-            self.move_cursor_back_by(1);
+        if !self.text.is_empty() && self.cursor_before_glyph.full_byte_offset > 0 {
+            let char = self.remove_character_at(self.cursor_before_glyph.full_byte_offset);
+            self.update_cursor_before_glyph_with_bytes_offset(self.cursor_before_glyph.full_byte_offset - char.len_utf8());
         }
     }
 
-    pub fn remove_multiple_characters_at(&mut self, index: usize, count: usize) {
-        let mut chars: Vec<char> = self.text.chars().collect();
-        let mut len = chars.len();
-        if index < chars.len() {
-            chars.drain(index..index + count);
-            len = chars.len();
-            self.text = chars.into_iter().collect();
-        }
-        self.text_size = len;
+    pub fn remove_multiple_characters_at(
+        &mut self,
+        byte_offset_start: usize,
+        byte_offset_end: usize,
+    ) {
+        self.text
+            .replace_range(byte_offset_start..byte_offset_end, "");
+    }
+    
+    pub fn set_cursor_before_glyph(&mut self, cursor: ByteCursor) {
+        self.cursor_before_glyph = cursor;
     }
 
-    pub fn remove_character_at(&mut self, index: usize) {
-        let mut chars: Vec<char> = self.text.chars().collect();
-        let mut len = chars.len();
-        if index < chars.len() {
-            chars.remove(index);
-            len = chars.len();
-            self.text = chars.into_iter().collect();
-        }
-        self.text_size = len;
+    pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
+        self.cursor_before_glyph.update_cursor(cursor, &self.text);
     }
 
-    pub fn remove_selected_text(&mut self) {
+    pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
+        self.cursor_before_glyph.update_byte_offset(byte_offset, &self.text);
+    }
+
+    pub fn remove_character_at(&mut self, byte_offset: usize) -> char {
+        let char = self.text.remove(byte_offset);
+        self.text_size = self.text.chars().count();
+        char
+    }
+
+    pub fn remove_selected_text(&mut self) -> Option<()> {
         if let (Some(origin), Some(end)) = (
-            self.selection.origin_character_index,
-            self.selection.ends_before_character_index,
+            self.selection.origin_character_byte_cursor,
+            self.selection.ends_before_character_byte_cursor,
         ) {
+            let origin_offset = origin.full_byte_offset;
+            let end_offset = end.full_byte_offset;
+
             if origin > end {
-                let count = origin - end;
-                self.remove_multiple_characters_at(end, count);
+                self.remove_multiple_characters_at(end_offset, origin_offset);
                 self.cursor_before_glyph = end;
             } else {
-                let count = end - origin;
-                self.remove_multiple_characters_at(origin, count);
+                self.remove_multiple_characters_at(origin_offset, end_offset);
                 self.cursor_before_glyph = origin;
             }
             self.reset_selection();
+            Some(())
+        } else {
+            None
         }
-    }
-
-    pub fn move_cursor_left(&mut self) {
-        if self.cursor_before_glyph > 0 {
-            self.cursor_before_glyph -= 1;
-        }
-    }
-
-    pub fn move_cursor_right(&mut self) {
-        if self.cursor_before_glyph < self.text_size {
-            self.cursor_before_glyph += 1;
-        }
-    }
-
-    pub fn move_cursor_to(&mut self, glyph_index: usize) {
-        self.cursor_before_glyph = glyph_index;
     }
 
     pub fn move_cursor_to_selection_left(&mut self) {
         if let (Some(origin), Some(end)) = (
-            self.selection.origin_character_index,
-            self.selection.ends_before_character_index,
+            self.selection.origin_character_byte_cursor,
+            self.selection.ends_before_character_byte_cursor,
         ) {
             if origin > end {
-                self.move_cursor_to(end);
+                self.set_cursor_before_glyph(end);
             } else {
-                self.move_cursor_to(origin);
+                self.set_cursor_before_glyph(origin);
             }
         }
     }
 
     pub fn move_cursor_to_selection_right(&mut self) {
         if let (Some(origin), Some(end)) = (
-            self.selection.origin_character_index,
-            self.selection.ends_before_character_index,
+            self.selection.origin_character_byte_cursor,
+            self.selection.ends_before_character_byte_cursor,
         ) {
             if origin < end {
-                self.cursor_before_glyph = end;
+                self.set_cursor_before_glyph(end);
             } else {
-                self.cursor_before_glyph = origin;
+                self.set_cursor_before_glyph(origin);
             }
         }
     }
 
     pub fn is_text_selected(&self) -> bool {
-        if let Some(origin) = self.selection.origin_character_index {
-            if let Some(end) = self.selection.ends_before_character_index {
+        if let Some(origin) = self.selection.origin_character_byte_cursor {
+            if let Some(end) = self.selection.ends_before_character_byte_cursor {
                 origin != end
             } else {
                 false
@@ -232,53 +218,55 @@ impl TextState {
     }
 
     pub fn reset_selection_end(&mut self) {
-        self.selection.ends_before_character_index = None;
+        self.selection.ends_before_character_byte_cursor = None;
         self.selection.lines.clear();
     }
 
     pub fn reset_selection(&mut self) {
-        self.selection.origin_character_index = None;
-        self.selection.ends_before_character_index = None;
+        self.selection.origin_character_byte_cursor = None;
+        self.selection.ends_before_character_byte_cursor = None;
         self.selection.lines.clear();
     }
 
     pub fn select_all(&mut self) {
-        self.selection.origin_character_index = Some(0);
-        self.selection.ends_before_character_index = Some(self.text_size);
+        self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
+        if self.text.len() > 0 {
+            self.selection.ends_before_character_byte_cursor = Some(ByteCursor::string_end(&self.text))
+        } else {
+            self.selection.ends_before_character_byte_cursor = None;
+        }
     }
 
     pub fn substring(&self, start: usize, end: usize) -> String {
         self.text.chars().skip(start).take(end - start).collect()
     }
 
+    pub fn substring_byte_offset(&self, start: usize, end: usize) -> String {
+        // TODO: add bounds checking
+        self.text[start..end].to_string()
+    }
+
     pub fn selected_text(&self) -> Option<String> {
         if let (Some(mut origin), Some(mut end)) = (
-            self.selection.origin_character_index,
-            self.selection.ends_before_character_index,
+            self.selection.origin_character_byte_cursor,
+            self.selection.ends_before_character_byte_cursor,
         ) {
             if origin > end {
                 std::mem::swap(&mut origin, &mut end);
             }
-            Some(self.substring(origin, end))
+            Some(self.substring_byte_offset(origin.full_byte_offset, end.full_byte_offset))
         } else {
             None
         }
     }
 
-    pub fn shape_if_not_shaped(
-        &self,
-        text_id: Id,
-        text_area: impl Into<Rect>,
-        ctx: &mut TextContext,
-        reshape: bool,
-    ) {
-        let text_area = text_area.into();
+    pub fn shape_if_not_shaped(&self, ctx: &mut TextContext, reshape: bool) {
         let font_system = &mut ctx.font_system;
         ctx.text_manager.create_and_shape_text_if_not_in_cache(
             &self.text,
             &self.text_style,
-            text_id,
-            text_area,
+            self.text_buffer_id,
+            self.text_area,
             font_system,
             reshape,
         );
@@ -290,8 +278,8 @@ impl TextState {
         buffer: &mut Buffer,
         font_system: &mut FontSystem,
     ) -> Option<(f32, f32)> {
-        let mut selection_starts_at_index = self.selection.origin_character_index?;
-        let mut selection_ends_before_char_index = self.selection.ends_before_character_index?;
+        let mut selection_starts_at_index = self.selection.origin_character_byte_cursor?;
+        let mut selection_ends_before_char_index = self.selection.ends_before_character_byte_cursor?;
         if selection_starts_at_index > selection_ends_before_char_index {
             // Swap the values
             std::mem::swap(
@@ -300,24 +288,27 @@ impl TextState {
             );
         }
 
-        let selection_end_char_index = if selection_ends_before_char_index > 0 {
-            if selection_starts_at_index == selection_ends_before_char_index {
-                selection_starts_at_index -= 1;
-            }
-            selection_ends_before_char_index - 1
-        } else {
-            0
-        };
+        // TODO: fix that 
+        // let selection_end_char_index = if selection_ends_before_char_index > 0 {
+        //     if selection_starts_at_index == selection_ends_before_char_index {
+        //         selection_starts_at_index -= 1;
+        //     }
+        //     selection_ends_before_char_index - 1
+        // } else {
+        //     0
+        // };
 
-        let start_cursor = char_index_to_layout_cursor(
-            buffer,
-            font_system,
-            &self.text,
-            selection_starts_at_index,
-        )?;
-        let end_cursor =
-            char_index_to_layout_cursor(buffer, font_system, &self.text, selection_end_char_index)?;
-
+        // let start_cursor = char_index_to_layout_cursor(
+        //     buffer,
+        //     font_system,
+        //     &self.text,
+        //     selection_starts_at_index,
+        // )?;
+        let start_cursor = selection_starts_at_index.layout_cursor(buffer, font_system)?;
+        // let end_cursor =
+        //     char_index_to_layout_cursor(buffer, font_system, &self.text, selection_end_char_index)?;
+        let end_cursor = selection_ends_before_char_index.layout_cursor(buffer, font_system)?;
+        
         self.selection.lines.clear();
 
         let horizontal_scroll = self.scroll.horizontal;
@@ -412,7 +403,7 @@ impl TextState {
         let text_area = self.text_area;
         let text_buffer_id = self.text_buffer_id;
 
-        self.shape_if_not_shaped(text_buffer_id, text_area, ctx, reshape);
+        self.shape_if_not_shaped(ctx, reshape);
 
         let buffer = ctx
             .text_manager
@@ -461,8 +452,12 @@ impl TextState {
         font_system: &mut FontSystem,
         update_reason: UpdateReason,
     ) -> Option<()> {
-        let caret_position_relative_to_buffer =
-            calculate_caret_position_pt(buffer, self.cursor_before_glyph, &self.text, font_system)?;
+        let caret_position_relative_to_buffer = calculate_caret_position_pt(
+            buffer,
+            self.cursor_before_glyph,
+            &self.text,
+            font_system,
+        )?;
 
         let current_relative_caret_offset = self.relative_caret_offset_horizontal;
         let old_scroll = self.scroll;
@@ -588,7 +583,6 @@ impl TextState {
 
         // Check if caret moved to the left (likely deletion from end)
         let old_absolute_caret_x = old_relative_caret_x + current_scroll_x;
-        
 
         // Use improved behavior when text overflows and caret moved left
         new_absolute_caret_x < old_absolute_caret_x
@@ -665,7 +659,7 @@ impl TextState {
     }
 
     fn insert_whitespace_at_cursor(&mut self, ctx: &mut TextContext) -> ActionResult {
-        self.insert_char_at_cursor(' ');
+        self.insert_char_at_cursor(' ', ctx);
         self.reset_selection();
         self.recalculate(ctx, true, UpdateReason::InsertedText);
         ActionResult::TextChanged
@@ -675,7 +669,7 @@ impl TextState {
         if self.is_text_selected() {
             self.move_cursor_to_selection_right();
         } else {
-            self.move_cursor_right();
+            self.move_cursor(ctx, Motion::Right);
         }
         self.reset_selection();
         self.recalculate(ctx, false, UpdateReason::MoveCaret);
@@ -686,40 +680,35 @@ impl TextState {
         if self.is_text_selected() {
             self.move_cursor_to_selection_left();
         } else {
-            self.move_cursor_left();
+            self.move_cursor(ctx, Motion::Left);
         }
         self.reset_selection();
         self.recalculate(ctx, false, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
-    
+
     fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
         let Some(buffer) = ctx.text_manager.buffer_no_retain_mut(&self.text_buffer_id) else {
             return ActionResult::None;
         };
 
-        let Some(byte_offset) = char_index_to_byte_offset(&self.text, self.cursor_before_glyph) else {
-            return ActionResult::None;
-        };
-        
-        let Some(cursor) = char_byte_offset_to_cursor(&self.text, byte_offset) else {
-            return ActionResult::None;
-        };
+        let cursor = self.cursor_before_glyph;
 
         let mut edit = Editor::new(buffer);
-        edit.set_cursor(cursor);
+        edit.set_cursor(cursor.cursor);
         edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
-        
         let new_cursor = edit.cursor();
-        let Some(new_char) = byte_offset_cursor_to_char_index(&self.text, new_cursor) else {
-            return ActionResult::None;
-        };
         
-        self.reset_selection();
-        self.move_cursor_to(new_char);
-        self.recalculate(ctx, false, UpdateReason::MoveCaret);
-        
+        self.update_cursor_before_glyph_with_cursor(new_cursor);
+
         ActionResult::CursorUpdated
+    }
+    
+    fn move_cursor_recalculate(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
+        let res = self.move_cursor(ctx, motion);
+        self.reset_selection();
+        self.recalculate(ctx, false, UpdateReason::MoveCaret);
+        res
     }
 
     fn insert_character_before_cursor(
@@ -728,11 +717,11 @@ impl TextState {
         ctx: &mut TextContext,
     ) -> ActionResult {
         if self.is_text_selected() {
-            self.move_cursor_left();
+            self.move_cursor(ctx, Motion::Left);
             self.remove_selected_text();
         }
         for character in character.chars() {
-            self.insert_char_at_cursor(character);
+            self.insert_char_at_cursor(character, ctx);
             self.reset_selection_end();
         }
 
@@ -749,8 +738,8 @@ impl TextState {
                 Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
                 Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                 Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
-                Action::MoveCursorUp => self.move_cursor(ctx, Motion::Up),
-                Action::MoveCursorDown => self.move_cursor(ctx, Motion::Down),
+                Action::MoveCursorUp => self.move_cursor_recalculate(ctx, Motion::Up),
+                Action::MoveCursorDown => self.move_cursor_recalculate(ctx, Motion::Down),
                 Action::InsertChar(character) => {
                     self.insert_character_before_cursor(character, ctx)
                 }
@@ -783,8 +772,7 @@ impl TextState {
                 font_system,
                 click_position_relative_to_area,
             )?;
-            let char_index = byte_offset_cursor_to_char_index(self.text(), byte_offset_cursor)?;
-            self.move_cursor_to(char_index);
+            self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
             self.recalculate(text_context, false, UpdateReason::MoveCaret);
         }
 
@@ -801,19 +789,27 @@ impl TextState {
         let text_manager = &mut ctx.text_manager;
         let font_system = &mut ctx.font_system;
         if self.is_selectable {
-            let glyph_cursor =
+            let byte_cursor_under_position =
                 text_manager.glyph_under_position(self, font_system, pointer_relative_position)?;
 
-            let char_index_under_position =
-                byte_offset_cursor_to_char_index(self.text(), glyph_cursor)?;
+            // let byte_cursor_char_index =
+            //     byte_offset_cursor_to_char_index(self.text(), byte_cursor_under_position)?;
 
-            if let Some(origin) = self.selection.origin_character_index {
-                if char_index_under_position != origin {
-                    self.selection.ends_before_character_index =
-                        Some(char_index_under_position + 1);
+            if let Some(origin) = self.selection.origin_character_byte_cursor {
+                if byte_cursor_under_position != origin.cursor {
+                    // TODO: probably need to do something with this
+                    // self.selection.ends_before_character_byte_cursor =
+                    //     Some(byte_cursor_char_index + 1);
+                    
+                    // self.selection.ends_before_character_byte_cursor =
+                    //     Some(byte_cursor_under_position);
+
+                    self.selection.ends_before_character_byte_cursor.as_mut().map(|byte_cursor| {
+                        byte_cursor.update_cursor(byte_cursor_under_position, &self.text)
+                    });
                 }
             } else {
-                self.selection.origin_character_index = Some(char_index_under_position);
+                self.selection.origin_character_byte_cursor = ByteCursor::from_cursor(byte_cursor_under_position, &self.text);
             }
 
             // Simple debounce to make scroll speed consistent
@@ -824,7 +820,7 @@ impl TextState {
                 let is_dragging_to_the_left = pointer_absolute_position.x < element_area.min.x;
 
                 if is_dragging_to_the_right || is_dragging_to_the_left {
-                    self.move_cursor_to(char_index_under_position);
+                    self.update_cursor_before_glyph_with_cursor(byte_cursor_under_position);
                     self.last_scroll_timestamp = now;
                 }
             }
@@ -850,30 +846,6 @@ fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer: &B
     let vertical_offset = vertical_offset(vertical_alignment, normalized_area, buffer_height);
 
     0.0 - vertical_offset
-}
-
-fn byte_offset_cursor_to_char_index(string: &str, cursor: Cursor) -> Option<usize> {
-    let mut char_byte_offset = 0;
-
-    // Iterate through lines until we reach cursor.line
-    for (line_number, line) in string.lines().enumerate() {
-        if line_number == cursor.line {
-            // Add the index within this line, but ensure it doesn't exceed the line length
-            if cursor.index <= line.len() {
-                char_byte_offset += cursor.index;
-                return char_byte_offset_to_char_index(string, char_byte_offset);
-            } else {
-                // Cursor index is out of bounds for this line
-                return None;
-            }
-        }
-
-        // Add line length plus 1 for the newline character
-        char_byte_offset += line.len() + 1;
-    }
-
-    // If cursor.line is beyond the available lines
-    None
 }
 
 pub enum UpdateReason {

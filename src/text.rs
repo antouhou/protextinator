@@ -5,6 +5,7 @@ use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping};
+use crate::byte_cursor::ByteCursor;
 
 #[derive(Default)]
 pub struct TextManager {
@@ -302,34 +303,6 @@ pub fn insert_multiple_characters_at(string: &mut String, index: usize, characte
     len
 }
 
-pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
-    let mut cumulative = 0;
-    let mut line_heh = None;
-    let mut char_heh = None;
-    // Iterator over lines
-    for (line_number, line) in full_text.lines().enumerate() {
-        let line_len = line.len();
-        // Check if char_index is in the current line.
-        if char_byte_offset < cumulative + line_len {
-            line_heh = Some(line_number);
-            char_heh = Some(char_byte_offset.saturating_sub(cumulative));
-            break;
-        }
-        // Add one for the newline character removed by .lines()
-        cumulative += line_len + 1;
-    }
-
-    if let (Some(line), Some(index)) = (line_heh, char_heh) {
-        Some(Cursor {
-            line,
-            index,
-            affinity: Default::default(),
-        })
-    } else {
-        None
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct CaretPosition {
     /// The x position of the caret. `None` means that this is an empty line.
@@ -337,71 +310,23 @@ pub struct CaretPosition {
     pub line: usize,
 }
 
-pub fn char_index_to_layout_cursor(
-    buffer: &mut Buffer,
-    font_system: &mut FontSystem,
-    text: &str,
-    char_index: usize,
-) -> Option<LayoutCursor> {
-    let char_byte_offset = char_index_to_byte_offset(text, char_index)?;
-    let cursor = char_byte_offset_to_cursor(text, char_byte_offset)?;
-    buffer.layout_cursor(font_system, cursor)
-}
-
-pub fn char_index_to_byte_offset(text: &str, char_index: usize) -> Option<usize> {
-    if char_index > text.chars().count() {
-        return None;
-    }
-
-    for (current_char_index, (byte_offset, _)) in text.char_indices().enumerate() {
-        if current_char_index == char_index {
-            return Some(byte_offset);
-        }
-    }
-
-    // Handle the case where char_index is exactly at the end of the string
-    if char_index == text.chars().count() {
-        return Some(text.len());
-    }
-
-    None
-}
-
-pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Option<usize> {
-    if char_byte_offset > text.len() {
-        return None;
-    }
-
-    // If the byte offset is at the end of the string, return the character count
-    if char_byte_offset == text.len() {
-        return Some(text.chars().count());
-    }
-
-    // Iterate over characters until we find a required byte offset
-    for (char_index, (byte_offset, _)) in text.char_indices().enumerate() {
-        if byte_offset == char_byte_offset {
-            return Some(char_index);
-        }
-        if byte_offset > char_byte_offset {
-            // The byte offset is not at a character boundary
-            return None;
-        }
-    }
-
-    None
-}
-
 pub(crate) fn calculate_caret_position_pt(
     buffer: &mut Buffer,
-    next_char_index: usize,
+    next_char_byte_cursor: ByteCursor,
     text: &str,
     font_system: &mut FontSystem,
 ) -> Option<CaretPosition> {
-    let maybe_next_glyph_cursor =
-        char_index_to_layout_cursor(buffer, font_system, text, next_char_index);
-    let previous_char_index = next_char_index.saturating_sub(1);
-    let previous_glyph_cursor =
-        char_index_to_layout_cursor(buffer, font_system, text, previous_char_index)?;
+    // let maybe_next_glyph_cursor =
+    //     char_index_to_layout_cursor(buffer, font_system, text, next_char_byte_cursor);
+    let maybe_next_glyph_cursor = next_char_byte_cursor.layout_cursor(buffer, font_system);
+    // let previous_char_index = next_char_byte_cursor.saturating_sub(1);
+    
+    // let previous_char_byte_offset = previous_char_byte_offset(text, next_char_byte_offset)?;
+    // let previous_char_byte_offset_cursor =
+    //     char_byte_offset_to_cursor(text, previous_char_byte_offset)?;
+    let previous_glyph_cursor = next_char_byte_cursor.prev_char_cursor(text)?.layout_cursor(buffer, font_system)?;
+        // buffer.layout_cursor(font_system, previous_char_byte_offset_cursor)?;
+    
     let maybe_previous_glyph_position =
         TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, previous_glyph_cursor);
 

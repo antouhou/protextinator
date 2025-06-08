@@ -7,6 +7,7 @@ mod style;
 #[cfg(test)]
 mod tests;
 mod text;
+mod byte_cursor;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;
