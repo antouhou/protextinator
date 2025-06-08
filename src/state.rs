@@ -231,7 +231,7 @@ impl TextState {
 
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
-        if self.text.len() > 0 {
+        if !self.text.is_empty() {
             self.selection.ends_before_character_byte_cursor =
                 Some(ByteCursor::after_last_character(&self.text))
         } else {

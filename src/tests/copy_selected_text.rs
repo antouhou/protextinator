@@ -50,14 +50,6 @@ pub fn test_copy_partial_selection() {
     );
 
     // Simulate dragging to select "Hello"
-    // Start dragging
-    text_state.handle_drag(
-        &mut ctx,
-        true,
-        Point { x: 2.0, y: 7.0 },
-        Point { x: 2.0, y: 7.0 },
-    );
-    // End dragging
     text_state.handle_drag(
         &mut ctx,
         true,
