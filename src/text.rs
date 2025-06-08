@@ -1,3 +1,4 @@
+use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect};
 use crate::state::TextState;
 use crate::style::TextStyle;
@@ -5,7 +6,6 @@ use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping};
-use crate::byte_cursor::ByteCursor;
 
 #[derive(Default)]
 pub struct TextManager {
@@ -293,8 +293,10 @@ pub(crate) fn calculate_caret_position_pt(
     font_system: &mut FontSystem,
 ) -> Option<CaretPosition> {
     let maybe_next_glyph_cursor = next_char_byte_cursor.layout_cursor(buffer, font_system);
-    let previous_glyph_cursor = next_char_byte_cursor.prev_char_cursor(text)?.layout_cursor(buffer, font_system)?;
-    
+    let previous_glyph_cursor = next_char_byte_cursor
+        .prev_char_cursor(text)?
+        .layout_cursor(buffer, font_system)?;
+
     let maybe_previous_glyph_position =
         TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, previous_glyph_cursor);
 

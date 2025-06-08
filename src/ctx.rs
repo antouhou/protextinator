@@ -27,10 +27,10 @@ pub struct Kek {
 }
 
 impl Kek {
-    pub fn handle_click(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
+    pub fn handle_press(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
-            state.handle_click(text_manager, click_position_relative.into());
+            state.handle_press(text_manager, click_position_relative.into());
             state.is_editing = true;
         } else {
             //TODO: print warning

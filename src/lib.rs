@@ -1,4 +1,5 @@
 mod action;
+mod byte_cursor;
 mod ctx;
 mod id;
 pub mod math;
@@ -7,7 +8,6 @@ mod style;
 #[cfg(test)]
 mod tests;
 mod text;
-mod byte_cursor;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;

@@ -1,14 +1,12 @@
 use crate::action::{Action, ActionResult};
+use crate::byte_cursor::ByteCursor;
 use crate::ctx::TextContext;
 use crate::style::{TextAlignment, TextStyle};
-use crate::text::{
-    buffer_height, calculate_caret_position_pt, vertical_offset,
-};
+use crate::text::{buffer_height, calculate_caret_position_pt, vertical_offset};
 use crate::{Id, Point, Rect};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
-use crate::byte_cursor::ByteCursor;
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
@@ -29,7 +27,7 @@ pub struct TextState {
     text: String,
 
     pub cursor_before_glyph: ByteCursor,
-    
+
     pub relative_caret_offset_horizontal: f32,
     pub relative_caret_offset_vertical: f32,
     pub caret_width: f32,
@@ -62,7 +60,7 @@ impl TextState {
             is_first_run: true,
             text,
             is_editing: false,
-            
+
             cursor_before_glyph: ByteCursor::default(),
 
             relative_caret_offset_horizontal: 0.0,
@@ -109,7 +107,8 @@ impl TextState {
         character: char,
         ctx: &mut TextContext,
     ) -> ActionResult {
-        self.text.insert(self.cursor_before_glyph.full_byte_offset, character);
+        self.text
+            .insert(self.cursor_before_glyph.full_byte_offset, character);
         self.text_size += 1;
         // TODO: wouldn't it be faster to just use set_byte_offset function here?
         self.move_cursor(ctx, Motion::Next);
@@ -117,28 +116,29 @@ impl TextState {
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        self.text.insert_str(self.cursor_before_glyph.full_byte_offset, text);
+        self.text
+            .insert_str(self.cursor_before_glyph.full_byte_offset, text);
         self.text_size = self.text.chars().count();
-        self.update_cursor_before_glyph_with_bytes_offset(self.cursor_before_glyph.full_byte_offset + text.len());
+        self.update_cursor_before_glyph_with_bytes_offset(
+            self.cursor_before_glyph.full_byte_offset + text.len(),
+        );
         self.text_size
     }
 
     pub fn remove_char_at_cursor(&mut self) {
         if !self.text.is_empty() && self.cursor_before_glyph.full_byte_offset > 0 {
-            let char = self.remove_character_at(self.cursor_before_glyph.full_byte_offset);
-            self.update_cursor_before_glyph_with_bytes_offset(self.cursor_before_glyph.full_byte_offset - char.len_utf8());
+            let char = self.remove_character(self.cursor_before_glyph.full_byte_offset);
+            self.update_cursor_before_glyph_with_bytes_offset(
+                self.cursor_before_glyph.full_byte_offset - char.len_utf8(),
+            );
         }
     }
 
-    pub fn remove_multiple_characters_at(
-        &mut self,
-        byte_offset_start: usize,
-        byte_offset_end: usize,
-    ) {
+    pub fn remove_characters(&mut self, byte_offset_start: usize, byte_offset_end: usize) {
         self.text
             .replace_range(byte_offset_start..byte_offset_end, "");
     }
-    
+
     pub fn set_cursor_before_glyph(&mut self, cursor: ByteCursor) {
         self.cursor_before_glyph = cursor;
     }
@@ -148,10 +148,11 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor_before_glyph.update_byte_offset(byte_offset, &self.text);
+        self.cursor_before_glyph
+            .update_byte_offset(byte_offset, &self.text);
     }
 
-    pub fn remove_character_at(&mut self, byte_offset: usize) -> char {
+    pub fn remove_character(&mut self, byte_offset: usize) -> char {
         let char = self.text.remove(byte_offset);
         self.text_size = self.text.chars().count();
         char
@@ -166,10 +167,10 @@ impl TextState {
             let end_offset = end.full_byte_offset;
 
             if origin > end {
-                self.remove_multiple_characters_at(end_offset, origin_offset);
+                self.remove_characters(end_offset, origin_offset);
                 self.cursor_before_glyph = end;
             } else {
-                self.remove_multiple_characters_at(origin_offset, end_offset);
+                self.remove_characters(origin_offset, end_offset);
                 self.cursor_before_glyph = origin;
             }
             self.reset_selection();
@@ -231,14 +232,11 @@ impl TextState {
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
         if self.text.len() > 0 {
-            self.selection.ends_before_character_byte_cursor = Some(ByteCursor::string_end(&self.text))
+            self.selection.ends_before_character_byte_cursor =
+                Some(ByteCursor::after_last_character(&self.text))
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }
-    }
-
-    pub fn substring(&self, start: usize, end: usize) -> String {
-        self.text.chars().skip(start).take(end - start).collect()
     }
 
     pub fn substring_byte_offset(&self, start: usize, end: usize) -> String {
@@ -279,7 +277,8 @@ impl TextState {
         font_system: &mut FontSystem,
     ) -> Option<(f32, f32)> {
         let mut selection_starts_at_index = self.selection.origin_character_byte_cursor?;
-        let mut selection_ends_before_char_index = self.selection.ends_before_character_byte_cursor?;
+        let mut selection_ends_before_char_index =
+            self.selection.ends_before_character_byte_cursor?;
         if selection_starts_at_index > selection_ends_before_char_index {
             // Swap the values
             std::mem::swap(
@@ -288,7 +287,7 @@ impl TextState {
             );
         }
 
-        // TODO: fix that 
+        // TODO: fix that
         // let selection_end_char_index = if selection_ends_before_char_index > 0 {
         //     if selection_starts_at_index == selection_ends_before_char_index {
         //         selection_starts_at_index -= 1;
@@ -308,7 +307,7 @@ impl TextState {
         // let end_cursor =
         //     char_index_to_layout_cursor(buffer, font_system, &self.text, selection_end_char_index)?;
         let end_cursor = selection_ends_before_char_index.layout_cursor(buffer, font_system)?;
-        
+
         self.selection.lines.clear();
 
         let horizontal_scroll = self.scroll.horizontal;
@@ -452,12 +451,8 @@ impl TextState {
         font_system: &mut FontSystem,
         update_reason: UpdateReason,
     ) -> Option<()> {
-        let caret_position_relative_to_buffer = calculate_caret_position_pt(
-            buffer,
-            self.cursor_before_glyph,
-            &self.text,
-            font_system,
-        )?;
+        let caret_position_relative_to_buffer =
+            calculate_caret_position_pt(buffer, self.cursor_before_glyph, &self.text, font_system)?;
 
         let current_relative_caret_offset = self.relative_caret_offset_horizontal;
         let old_scroll = self.scroll;
@@ -698,12 +693,12 @@ impl TextState {
         edit.set_cursor(cursor.cursor);
         edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
         let new_cursor = edit.cursor();
-        
+
         self.update_cursor_before_glyph_with_cursor(new_cursor);
 
         ActionResult::CursorUpdated
     }
-    
+
     fn move_cursor_recalculate(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
         let res = self.move_cursor(ctx, motion);
         self.reset_selection();
@@ -730,26 +725,34 @@ impl TextState {
     }
 
     pub fn apply_action(&mut self, ctx: &mut TextContext, action: &Action) -> ActionResult {
-        if self.is_editable && self.is_selectable {
-            match action {
-                Action::Paste(text) => self.paste_text_at_cursor(ctx, text),
-                Action::Cut => self.cut_selected_text(ctx),
-                Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
-                Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
-                Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
-                Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
-                Action::MoveCursorUp => self.move_cursor_recalculate(ctx, Motion::Up),
-                Action::MoveCursorDown => self.move_cursor_recalculate(ctx, Motion::Down),
-                Action::InsertChar(character) => {
-                    self.insert_character_before_cursor(character, ctx)
+        if self.is_selectable {
+            let res = if self.is_editable {
+                match action {
+                    Action::Paste(text) => self.paste_text_at_cursor(ctx, text),
+                    Action::Cut => self.cut_selected_text(ctx),
+                    Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
+                    Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
+                    Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
+                    Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
+                    Action::MoveCursorUp => self.move_cursor_recalculate(ctx, Motion::Up),
+                    Action::MoveCursorDown => self.move_cursor_recalculate(ctx, Motion::Down),
+                    Action::InsertChar(character) => {
+                        self.insert_character_before_cursor(character, ctx)
+                    }
+                    _ => ActionResult::None,
                 }
-                _ => ActionResult::None,
-            }
-        } else if self.is_selectable {
-            match action {
-                Action::Copy => self.copy_selected_text(),
-                Action::SelectAll => self.select_all_recalculate(ctx),
-                _ => ActionResult::None,
+            } else {
+                ActionResult::None
+            };
+
+            if res.is_none() {
+                match action {
+                    Action::CopySelectedText => self.copy_selected_text(),
+                    Action::SelectAll => self.select_all_recalculate(ctx),
+                    _ => ActionResult::None,
+                }
+            } else {
+                res
             }
         } else {
             ActionResult::None
@@ -757,7 +760,7 @@ impl TextState {
     }
 
     // TODO: make it an action
-    pub fn handle_click(
+    pub fn handle_press(
         &mut self,
         text_context: &mut TextContext,
         click_position_relative_to_area: Point,
@@ -773,6 +776,11 @@ impl TextState {
                 click_position_relative_to_area,
             )?;
             self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
+
+            // Reset selection to start at the press location
+            self.selection.origin_character_byte_cursor = Some(self.cursor_before_glyph);
+            self.selection.ends_before_character_byte_cursor = None;
+
             self.recalculate(text_context, false, UpdateReason::MoveCaret);
         }
 
@@ -786,6 +794,9 @@ impl TextState {
         pointer_relative_position: Point,
         pointer_absolute_position: Point,
     ) -> Option<()> {
+        if !is_dragging {
+            return None;
+        }
         let text_manager = &mut ctx.text_manager;
         let font_system = &mut ctx.font_system;
         if self.is_selectable {
@@ -800,16 +811,16 @@ impl TextState {
                     // TODO: probably need to do something with this
                     // self.selection.ends_before_character_byte_cursor =
                     //     Some(byte_cursor_char_index + 1);
-                    
-                    // self.selection.ends_before_character_byte_cursor =
-                    //     Some(byte_cursor_under_position);
 
-                    self.selection.ends_before_character_byte_cursor.as_mut().map(|byte_cursor| {
-                        byte_cursor.update_cursor(byte_cursor_under_position, &self.text)
-                    });
+                    if let Some(selection) =
+                        self.selection.ends_before_character_byte_cursor.as_mut()
+                    {
+                        selection.update_cursor(byte_cursor_under_position, &self.text);
+                    } else {
+                        self.selection.ends_before_character_byte_cursor =
+                            ByteCursor::from_cursor(byte_cursor_under_position, &self.text);
+                    }
                 }
-            } else {
-                self.selection.origin_character_byte_cursor = ByteCursor::from_cursor(byte_cursor_under_position, &self.text);
             }
 
             // Simple debounce to make scroll speed consistent

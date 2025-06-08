@@ -5,6 +5,7 @@ use crate::{
 use cosmic_text::Color;
 
 mod caret_positioning;
+mod copy_selected_text;
 mod serialization;
 
 fn mono_style_test() -> TextStyle {

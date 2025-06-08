@@ -1,4 +1,4 @@
-use cosmic_text::{Buffer, Cursor, FontSystem, LayoutCursor};
+use cosmic_text::{Affinity, Buffer, Cursor, FontSystem, LayoutCursor};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteCursor {
@@ -17,8 +17,8 @@ impl ByteCursor {
             full_byte_offset: 0,
         }
     }
-    
-    pub fn string_end(string: &str) -> Self {
+
+    pub fn before_last_character(string: &str) -> Self {
         if string.is_empty() {
             Self::string_start()
         } else {
@@ -28,14 +28,22 @@ impl ByteCursor {
                 .map(|(byte_idx, _ch)| byte_idx)
                 .expect("string is not empty, so there must be at least one character");
             Self {
-                cursor: char_byte_offset_to_cursor(string, last_byte_offset).expect("the byte offset must be a valid cursor at this point"),
+                cursor: char_byte_offset_to_cursor(string, last_byte_offset)
+                    .expect("the byte offset must be a valid cursor at this point"),
                 full_byte_offset: last_byte_offset,
             }
         }
     }
-    
+
+    pub fn after_last_character(string: &str) -> Self {
+        let mut res = Self::before_last_character(string);
+        res.cursor.affinity = Affinity::After;
+        res.full_byte_offset = string.len();
+        res
+    }
+
     pub fn from_cursor(cursor: Cursor, string: &str) -> Option<ByteCursor> {
-        let mut  res = Self::string_start();
+        let mut res = Self::string_start();
         let is_valid_cursor = res.update_cursor(cursor, string);
         if is_valid_cursor {
             Some(res)
@@ -43,9 +51,9 @@ impl ByteCursor {
             None
         }
     }
-    
+
     pub fn from_byte_offset(byte_offset: usize, string: &str) -> Option<ByteCursor> {
-        let mut  res = Self::string_start();
+        let mut res = Self::string_start();
         let is_valid_byte_offset = res.update_byte_offset(byte_offset, string);
         if is_valid_byte_offset {
             Some(res)
@@ -53,8 +61,12 @@ impl ByteCursor {
             None
         }
     }
-    
-    pub fn layout_cursor(&self, buffer: &mut Buffer, font_system: &mut FontSystem) -> Option<LayoutCursor> {
+
+    pub fn layout_cursor(
+        &self,
+        buffer: &mut Buffer,
+        font_system: &mut FontSystem,
+    ) -> Option<LayoutCursor> {
         buffer.layout_cursor(font_system, self.cursor)
     }
 
@@ -88,9 +100,12 @@ impl ByteCursor {
             false
         }
     }
-    
+
     pub fn prev_char_cursor(&self, string: &str) -> Option<ByteCursor> {
-        Self::from_byte_offset(previous_char_byte_offset(string, self.full_byte_offset)?, string)
+        Self::from_byte_offset(
+            previous_char_byte_offset(string, self.full_byte_offset)?,
+            string,
+        )
     }
 }
 
