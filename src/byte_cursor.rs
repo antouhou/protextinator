@@ -3,7 +3,7 @@ use cosmic_text::{Affinity, Buffer, Cursor, FontSystem, LayoutCursor};
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ByteCursor {
     pub cursor: Cursor,
-    pub full_byte_offset: usize,
+    pub byte_character_start: usize,
 }
 
 impl ByteCursor {
@@ -14,7 +14,7 @@ impl ByteCursor {
                 index: 0,
                 affinity: Default::default(),
             },
-            full_byte_offset: 0,
+            byte_character_start: 0,
         }
     }
 
@@ -30,7 +30,7 @@ impl ByteCursor {
             Self {
                 cursor: char_byte_offset_to_cursor(string, last_byte_offset)
                     .expect("the byte offset must be a valid cursor at this point"),
-                full_byte_offset: last_byte_offset,
+                byte_character_start: last_byte_offset,
             }
         }
     }
@@ -38,7 +38,7 @@ impl ByteCursor {
     pub fn after_last_character(string: &str) -> Self {
         let mut res = Self::before_last_character(string);
         res.cursor.affinity = Affinity::After;
-        res.full_byte_offset = string.len();
+        res.byte_character_start = string.len();
         res
     }
 
@@ -72,7 +72,7 @@ impl ByteCursor {
 
     /// Returns char index of the cursor in a given string
     pub fn char_index(&self, string: &str) -> Option<usize> {
-        char_byte_offset_to_char_index(string, self.full_byte_offset)
+        char_byte_offset_to_char_index(string, self.byte_character_start)
     }
 
     pub fn update_cursor(&mut self, cursor: Cursor, string: &str) -> bool {
@@ -81,7 +81,7 @@ impl ByteCursor {
         }
         if let Some(byte_offset) = byte_offset_cursor_to_byte_offset(string, cursor) {
             self.cursor = cursor;
-            self.full_byte_offset = byte_offset;
+            self.byte_character_start = byte_offset;
             true
         } else {
             false
@@ -89,12 +89,12 @@ impl ByteCursor {
     }
 
     pub fn update_byte_offset(&mut self, byte_offset: usize, string: &str) -> bool {
-        if self.full_byte_offset == byte_offset {
+        if self.byte_character_start == byte_offset {
             return true;
         }
         if let Some(cursor) = char_byte_offset_to_cursor(string, byte_offset) {
             self.cursor = cursor;
-            self.full_byte_offset = byte_offset;
+            self.byte_character_start = byte_offset;
             true
         } else {
             false
@@ -103,9 +103,48 @@ impl ByteCursor {
 
     pub fn prev_char_cursor(&self, string: &str) -> Option<ByteCursor> {
         Self::from_byte_offset(
-            previous_char_byte_offset(string, self.full_byte_offset)?,
+            previous_char_byte_offset(string, self.byte_character_start)?,
             string,
         )
+    }
+
+    //
+    pub fn next_char_byte_offset(&self, string: &str) -> Option<usize> {
+        // TODO: check bounds first
+        string[self.byte_character_start..]
+            .chars()
+            .next()
+            .map(|ch| self.byte_character_start + ch.len_utf8())
+    }
+
+    pub fn next_char_cursor(&self, string: &str) -> Option<ByteCursor> {
+        Self::from_byte_offset(self.next_char_byte_offset(string)?, string)
+    }
+
+    pub fn next_or_this_cursor(&self, string: &str) -> ByteCursor {
+        self.next_char_cursor(string).unwrap_or_else(|| {
+            let mut res = *self;
+            res.cursor.affinity = Affinity::After;
+            res
+        })
+    }
+
+    pub fn move_to_previous_char(&mut self, string: &str) -> bool {
+        if let Some(prev_cursor) = self.prev_char_cursor(string) {
+            *self = prev_cursor;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn move_to_next_char(&mut self, string: &str) -> bool {
+        if let Some(next_cursor) = self.next_char_cursor(string) {
+            *self = next_cursor;
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -177,15 +216,24 @@ fn previous_char_byte_offset(text: &str, current: usize) -> Option<usize> {
         .map(|(byte_idx, _ch)| byte_idx)
 }
 
-fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {
+pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {
     let mut char_byte_offset = 0;
 
     // Iterate through lines until we reach cursor.line
     for (line_number, line) in string.lines().enumerate() {
         if line_number == cursor.line {
-            // Add the index within this line, but ensure it doesn't exceed the line length
+            // Ensure index is within bounds
             if cursor.index <= line.len() {
+                // Base offset up to this line + index
                 char_byte_offset += cursor.index;
+
+                // If affinity is After, and there's a char at this position, advance past it
+                if cursor.affinity == Affinity::After && cursor.index < line.len() {
+                    if let Some(ch) = line[cursor.index..].chars().next() {
+                        char_byte_offset += ch.len_utf8();
+                    }
+                }
+
                 return Some(char_byte_offset);
             } else {
                 // Cursor index is out of bounds for this line

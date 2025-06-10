@@ -17,10 +17,7 @@ pub fn test_copy_empty_selection() {
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // No selection, cursor at the beginning
-    assert_eq!(
-        text_state.cursor_before_glyph.char_index(text_state.text()),
-        Some(0)
-    );
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
     assert!(!text_state.is_text_selected());
 
     // Try to copy with no selection
@@ -44,10 +41,7 @@ pub fn test_copy_partial_selection() {
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(
-        text_state.cursor_before_glyph.char_index(text_state.text()),
-        Some(0)
-    );
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Hello"
     text_state.handle_drag(
@@ -106,10 +100,7 @@ pub fn test_copy_cyrillic_text() {
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(
-        text_state.cursor_before_glyph.char_index(text_state.text()),
-        Some(0)
-    );
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Привет"
     text_state.handle_drag(
@@ -145,10 +136,7 @@ pub fn test_copy_after_editing() {
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(
-        text_state.cursor_before_glyph.char_index(text_state.text()),
-        Some(0)
-    );
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Test "
     text_state.handle_drag(

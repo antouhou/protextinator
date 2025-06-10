@@ -5,7 +5,9 @@ use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use cosmic_text::{Attrs, Buffer, Cursor, FontSystem, LayoutCursor, Metrics, Shaping};
+use cosmic_text::{
+    Attrs, Buffer, Cursor, Edit, Editor, FontSystem, LayoutCursor, Metrics, Shaping,
+};
 
 #[derive(Default)]
 pub struct TextManager {
@@ -23,7 +25,7 @@ impl From<TextWrap> for cosmic_text::Wrap {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct GlyphPosition {
     pub x: f32,
     pub y: f32,
@@ -77,7 +79,7 @@ impl TextManager {
         self.buffer_cache.remove(&id);
     }
 
-    pub fn glyph_under_position(
+    pub fn char_under_position(
         &mut self,
         state: &TextState,
         font_system: &mut FontSystem,
@@ -279,128 +281,15 @@ pub(crate) fn vertical_offset(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct CaretPosition {
-    /// The x position of the caret. `None` means that this is an empty line.
-    pub x: Option<f32>,
-    pub line: usize,
-}
-
 pub(crate) fn calculate_caret_position_pt(
     buffer: &mut Buffer,
-    next_char_byte_cursor: ByteCursor,
-    text: &str,
-    font_system: &mut FontSystem,
-) -> Option<CaretPosition> {
-    let maybe_next_glyph_cursor = next_char_byte_cursor.layout_cursor(buffer, font_system);
-    let previous_glyph_cursor = next_char_byte_cursor
-        .prev_char_cursor(text)?
-        .layout_cursor(buffer, font_system)?;
+    current_char_byte_cursor: ByteCursor,
+) -> Option<Point> {
+    let mut edit = Editor::new(&mut *buffer);
+    edit.set_cursor(current_char_byte_cursor.cursor);
 
-    let maybe_previous_glyph_position =
-        TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, previous_glyph_cursor);
-
-    let next_glyph_cursor = if let Some(cursor) = maybe_next_glyph_cursor {
-        cursor
-    } else {
-        let prev = maybe_previous_glyph_position.unwrap();
-        // If there's no next character - it's the end of the text, the caret should be at the end
-        //  of the line.
-        return Some(CaretPosition {
-            x: Some(prev.x + prev.width),
-            line: count_lines_before_cursor(buffer, previous_glyph_cursor),
-        });
-    };
-
-    let is_wrapped_line_beginning = next_glyph_cursor.line <= previous_glyph_cursor.line
-        && next_glyph_cursor.layout < previous_glyph_cursor.layout;
-    let previous_glyph_is_higher_than_next_glyph = next_glyph_cursor.line
-        == previous_glyph_cursor.line
-        && next_glyph_cursor.layout == previous_glyph_cursor.layout
-        && next_glyph_cursor.glyph < previous_glyph_cursor.glyph;
-
-    if is_wrapped_line_beginning || previous_glyph_is_higher_than_next_glyph {
-        // If cosmic text can't convert cursor to layout cursor, it falls back to the
-        //  beginning of the string line. That case most likely indicates that we're
-        //  at the beginning of a word wrapped line.
-        let next_line_first_glyph = LayoutCursor {
-            line: previous_glyph_cursor.line,
-            layout: previous_glyph_cursor.layout + 1,
-            glyph: 0,
-        };
-        let next_glyph_x_position = TextManager::get_position_of_a_glyph_with_buffer_and_cursor(
-            buffer,
-            next_line_first_glyph,
-        )
-        .map(|x| x.x)
-        .unwrap_or_default();
-
-        return Some(CaretPosition {
-            x: Some(next_glyph_x_position),
-            line: count_lines_before_cursor(buffer, next_line_first_glyph),
-        });
-    }
-
-    let maybe_next_glyph_position =
-        TextManager::get_position_of_a_glyph_with_buffer_and_cursor(buffer, next_glyph_cursor);
-    let is_next_line = next_glyph_cursor.line > previous_glyph_cursor.line;
-
-    // Normal glyph route
-    if !is_next_line {
-        if let Some(next_glyph_position) = maybe_next_glyph_position {
-            return Some(CaretPosition {
-                x: Some(next_glyph_position.x),
-                line: count_lines_before_cursor(buffer, next_glyph_cursor),
-            });
-        }
-    }
-
-    // The last glyph before word wrapping route
-    if let Some(previous_glyph_position) = maybe_previous_glyph_position {
-        return Some(CaretPosition {
-            x: Some(previous_glyph_position.x + previous_glyph_position.width),
-            line: count_lines_before_cursor(buffer, previous_glyph_cursor),
-        });
-    }
-
-    // Empty line - no previous glyph, no next glyph
-    Some(CaretPosition {
-        x: None,
-        line: count_lines_before_cursor(buffer, previous_glyph_cursor),
+    edit.cursor_position().map(|(x, y)| Point {
+        x: x as f32,
+        y: y as f32,
     })
-}
-
-pub fn count_lines_before_cursor(buffer: &Buffer, cursor: LayoutCursor) -> usize {
-    let mut lines_counted: usize = 0;
-
-    for (i, line) in buffer.lines.iter().enumerate() {
-        if i < cursor.line {
-            let layouts_count = line
-                .layout_opt()
-                .as_ref()
-                .map(|layouts| layouts.len())
-                .unwrap_or(0);
-            lines_counted += layouts_count;
-            continue;
-        }
-
-        if i > cursor.line {
-            break;
-        }
-
-        let layouts = line.layout_opt().unwrap();
-        for (j, _layout) in layouts.iter().enumerate() {
-            if j < cursor.layout {
-                lines_counted += 1;
-                continue;
-            }
-            if j == cursor.layout {
-                break;
-            }
-
-            lines_counted += 1;
-        }
-    }
-
-    lines_counted
 }

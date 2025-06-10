@@ -1,7 +1,7 @@
 use crate::action::{Action, ActionResult};
 use crate::byte_cursor::ByteCursor;
 use crate::ctx::TextContext;
-use crate::style::{TextAlignment, TextStyle};
+use crate::style::TextStyle;
 use crate::text::{buffer_height, calculate_caret_position_pt, vertical_offset};
 use crate::{Id, Point, Rect};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
@@ -26,7 +26,7 @@ pub struct TextState {
     pub is_first_run: bool,
     text: String,
 
-    pub cursor_before_glyph: ByteCursor,
+    pub cursor: ByteCursor,
 
     pub relative_caret_offset_horizontal: f32,
     pub relative_caret_offset_vertical: f32,
@@ -61,7 +61,7 @@ impl TextState {
             text,
             is_editing: false,
 
-            cursor_before_glyph: ByteCursor::default(),
+            cursor: ByteCursor::default(),
 
             relative_caret_offset_horizontal: 0.0,
             relative_caret_offset_vertical: 0.0,
@@ -89,7 +89,7 @@ impl TextState {
 
         self.shape_if_not_shaped(ctx, false);
 
-        if self.cursor_before_glyph.full_byte_offset > self.text.len() {
+        if self.cursor.byte_character_start > self.text.len() {
             self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
@@ -108,7 +108,7 @@ impl TextState {
         ctx: &mut TextContext,
     ) -> ActionResult {
         self.text
-            .insert(self.cursor_before_glyph.full_byte_offset, character);
+            .insert(self.cursor.byte_character_start, character);
         self.text_size += 1;
         // TODO: wouldn't it be faster to just use set_byte_offset function here?
         self.move_cursor(ctx, Motion::Next);
@@ -116,20 +116,19 @@ impl TextState {
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        self.text
-            .insert_str(self.cursor_before_glyph.full_byte_offset, text);
+        self.text.insert_str(self.cursor.byte_character_start, text);
         self.text_size = self.text.chars().count();
         self.update_cursor_before_glyph_with_bytes_offset(
-            self.cursor_before_glyph.full_byte_offset + text.len(),
+            self.cursor.byte_character_start + text.len(),
         );
         self.text_size
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.text.is_empty() && self.cursor_before_glyph.full_byte_offset > 0 {
-            let char = self.remove_character(self.cursor_before_glyph.full_byte_offset);
+        if !self.text.is_empty() && self.cursor.byte_character_start > 0 {
+            let char = self.remove_character(self.cursor.byte_character_start);
             self.update_cursor_before_glyph_with_bytes_offset(
-                self.cursor_before_glyph.full_byte_offset - char.len_utf8(),
+                self.cursor.byte_character_start - char.len_utf8(),
             );
         }
     }
@@ -140,16 +139,15 @@ impl TextState {
     }
 
     pub fn set_cursor_before_glyph(&mut self, cursor: ByteCursor) {
-        self.cursor_before_glyph = cursor;
+        self.cursor = cursor;
     }
 
     pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor_before_glyph.update_cursor(cursor, &self.text);
+        self.cursor.update_cursor(cursor, &self.text);
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor_before_glyph
-            .update_byte_offset(byte_offset, &self.text);
+        self.cursor.update_byte_offset(byte_offset, &self.text);
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> char {
@@ -163,15 +161,15 @@ impl TextState {
             self.selection.origin_character_byte_cursor,
             self.selection.ends_before_character_byte_cursor,
         ) {
-            let origin_offset = origin.full_byte_offset;
-            let end_offset = end.full_byte_offset;
+            let origin_offset = origin.byte_character_start;
+            let end_offset = end.byte_character_start;
 
             if origin > end {
                 self.remove_characters(end_offset, origin_offset);
-                self.cursor_before_glyph = end;
+                self.cursor = end;
             } else {
                 self.remove_characters(origin_offset, end_offset);
-                self.cursor_before_glyph = origin;
+                self.cursor = origin;
             }
             self.reset_selection();
             Some(())
@@ -252,7 +250,7 @@ impl TextState {
             if origin > end {
                 std::mem::swap(&mut origin, &mut end);
             }
-            Some(self.substring_byte_offset(origin.full_byte_offset, end.full_byte_offset))
+            Some(self.substring_byte_offset(origin.byte_character_start, end.byte_character_start))
         } else {
             None
         }
@@ -409,12 +407,7 @@ impl TextState {
             .buffer_no_retain_mut(&text_buffer_id)
             .unwrap();
 
-        self.recalculate_caret_position_and_scroll(
-            text_area,
-            buffer,
-            &mut ctx.font_system,
-            update_reason,
-        );
+        self.recalculate_caret_position_and_scroll(text_area, buffer, update_reason);
         self.update_buffer_size_to_match_element(buffer, text_area, &mut ctx.font_system);
         self.recalculate_selection_area(buffer, &mut ctx.font_system);
     }
@@ -448,104 +441,109 @@ impl TextState {
         &mut self,
         text_area: Rect,
         buffer: &mut Buffer,
-        font_system: &mut FontSystem,
         update_reason: UpdateReason,
     ) -> Option<()> {
-        let caret_position_relative_to_buffer =
-            calculate_caret_position_pt(buffer, self.cursor_before_glyph, &self.text, font_system)?;
-
-        let current_relative_caret_offset = self.relative_caret_offset_horizontal;
         let old_scroll = self.scroll;
-        let line_height = self.text_style.line_height_pt();
-        let text_area_width = text_area.width();
+        let mut new_scroll = old_scroll;
         let vertical_scroll_to_align_text =
             calculate_vertical_offset(&self.text_style, text_area, buffer);
 
-        let new_absolute_caret_offset =
-            if let Some(absolute_caret_offset) = caret_position_relative_to_buffer.x {
-                // Not an empty line
-                absolute_caret_offset
-            } else {
-                let container_alignment = self.text_style.horizontal_alignment;
-                // This means that this is an empty line, and the caret should be aligned to according
-                //  to the horizontal text alignment
-                match container_alignment {
-                    TextAlignment::Start => 0.0,
-                    TextAlignment::End => text_area_width,
-                    TextAlignment::Center => text_area_width / 2.0,
-                    // TODO: check that implementations after this are actually correct
-                    TextAlignment::Left => 0.0,
-                    TextAlignment::Right => text_area_width,
-                    TextAlignment::Justify => 0.0,
-                }
-            };
+        if self.is_editing {
+            let caret_position_relative_to_buffer =
+                calculate_caret_position_pt(buffer, self.cursor)?;
 
-        // TODO: A little hack to set horizontal scroll
-        let mut new_scroll = old_scroll;
-        let mut new_relative_caret_offset = current_relative_caret_offset;
+            let current_relative_caret_offset = self.relative_caret_offset_horizontal;
 
-        let current_absolute_visible_text_area = (
-            old_scroll.horizontal,
-            old_scroll.horizontal + text_area_width,
-        );
-        let min = current_absolute_visible_text_area.0;
-        let max = current_absolute_visible_text_area.1;
-        let is_new_caret_visible =
-            new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
+            let text_area_width = text_area.width();
 
-        // If caret is within the visible text area, we don't need to scroll.
-        //  In that case, we should return the old scroll and modify the caret offset
-        if is_new_caret_visible {
-            // Check if we should implement improved scroll behavior for overflowing text
-            let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
-                buffer,
-                text_area_width,
-                current_relative_caret_offset,
-                new_absolute_caret_offset,
+            // TODO: there was some other implementation that took horizontal alignment into account,
+            //  check if it is needed
+            let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
+            // if let Some(absolute_caret_offset) = caret_position_relative_to_buffer.x {
+            //     // Not an empty line
+            //     absolute_caret_offset
+            // } else {
+            //     let container_alignment = self.text_style.horizontal_alignment;
+            //     // This means that this is an empty line, and the caret should be aligned to according
+            //     //  to the horizontal text alignment
+            //     match container_alignment {
+            //         TextAlignment::Start => 0.0,
+            //         TextAlignment::End => text_area_width,
+            //         TextAlignment::Center => text_area_width / 2.0,
+            //         // TODO: check that implementations after this are actually correct
+            //         TextAlignment::Left => 0.0,
+            //         TextAlignment::Right => text_area_width,
+            //         TextAlignment::Justify => 0.0,
+            //     }
+            // };
+
+            // TODO: A little hack to set horizontal scroll
+            let mut new_relative_caret_offset = current_relative_caret_offset;
+
+            let current_absolute_visible_text_area = (
                 old_scroll.horizontal,
+                old_scroll.horizontal + text_area_width,
             );
+            let min = current_absolute_visible_text_area.0;
+            let max = current_absolute_visible_text_area.1;
+            let is_new_caret_visible =
+                new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
 
-            let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
+            // If caret is within the visible text area, we don't need to scroll.
+            //  In that case, we should return the old scroll and modify the caret offset
+            if is_new_caret_visible {
+                // Check if we should implement improved scroll behavior for overflowing text
+                let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
+                    buffer,
+                    text_area_width,
+                    current_relative_caret_offset,
+                    new_absolute_caret_offset,
+                    old_scroll.horizontal,
+                );
 
-            if should_update_horizontal_scroll && !is_moving_caret {
-                // Improved behavior: keep caret visually fixed, adjust scroll accordingly
-                // We want: new_absolute_caret_offset = new_scroll.horizontal + new_relative_caret_offset
-                // Since we want to keep new_relative_caret_offset = current_relative_caret_offset
-                // We get: new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset
-                new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset;
-                new_relative_caret_offset = current_relative_caret_offset; // Keep caret visually fixed
+                let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
+
+                if should_update_horizontal_scroll && !is_moving_caret {
+                    // Improved behavior: keep caret visually fixed, adjust scroll accordingly
+                    // We want: new_absolute_caret_offset = new_scroll.horizontal + new_relative_caret_offset
+                    // Since we want to keep new_relative_caret_offset = current_relative_caret_offset
+                    // We get: new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset
+                    new_scroll.horizontal =
+                        new_absolute_caret_offset - current_relative_caret_offset;
+                    new_relative_caret_offset = current_relative_caret_offset; // Keep caret visually fixed
+                } else {
+                    // Standard behavior: Do not do anything with the scroll, convert caret to relative
+                    new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
+                    new_scroll.horizontal = old_scroll.horizontal;
+                }
+            } else if new_absolute_caret_offset > max {
+                new_scroll = Scroll::new(
+                    0,
+                    0.0,
+                    new_absolute_caret_offset - text_area_width + self.caret_width,
+                );
+                // Adjust caret offset to be relative to the new scroll
+                new_relative_caret_offset = text_area_width - self.caret_width;
+            } else if new_absolute_caret_offset < min {
+                new_scroll = Scroll::new(0, 0.0, new_absolute_caret_offset);
+                new_relative_caret_offset = 0.0;
+            } else if new_absolute_caret_offset < 0.0 {
+                new_scroll = Scroll::new(0, 0.0, 0.0);
+                new_relative_caret_offset = 0.0;
             } else {
-                // Standard behavior: Do not do anything with the scroll, convert caret to relative
-                new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
-                new_scroll.horizontal = old_scroll.horizontal;
+                // Do nothing?
             }
-        } else if new_absolute_caret_offset > max {
-            new_scroll = Scroll::new(
-                0,
-                0.0,
-                new_absolute_caret_offset - text_area_width + self.caret_width,
-            );
-            // Adjust caret offset to be relative to the new scroll
-            new_relative_caret_offset = text_area_width - self.caret_width;
-        } else if new_absolute_caret_offset < min {
-            new_scroll = Scroll::new(0, 0.0, new_absolute_caret_offset);
-            new_relative_caret_offset = 0.0;
-        } else if new_absolute_caret_offset < 0.0 {
-            new_scroll = Scroll::new(0, 0.0, 0.0);
-            new_relative_caret_offset = 0.0;
-        } else {
-            // Do nothing?
+
+            // let mut vertical_offset = vertical_scroll_to_align_text * -1.0;
+            // vertical_offset += caret_position_relative_to_buffer.y;
+
+            self.relative_caret_offset_horizontal = new_relative_caret_offset;
+            self.relative_caret_offset_vertical = caret_position_relative_to_buffer.y;
         }
 
         new_scroll.vertical = vertical_scroll_to_align_text;
         buffer.set_scroll(new_scroll);
         self.scroll = new_scroll;
-
-        let mut vertical_offset = vertical_scroll_to_align_text * -1.0;
-        vertical_offset += caret_position_relative_to_buffer.line as f32 * line_height;
-
-        self.relative_caret_offset_horizontal = new_relative_caret_offset;
-        self.relative_caret_offset_vertical = vertical_offset;
 
         None
     }
@@ -653,13 +651,6 @@ impl TextState {
         ActionResult::TextChanged
     }
 
-    fn insert_whitespace_at_cursor(&mut self, ctx: &mut TextContext) -> ActionResult {
-        self.insert_char_at_cursor(' ', ctx);
-        self.reset_selection();
-        self.recalculate(ctx, true, UpdateReason::InsertedText);
-        ActionResult::TextChanged
-    }
-
     fn move_cursor_right_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
         if self.is_text_selected() {
             self.move_cursor_to_selection_right();
@@ -687,14 +678,10 @@ impl TextState {
             return ActionResult::None;
         };
 
-        let cursor = self.cursor_before_glyph;
-
         let mut edit = Editor::new(buffer);
-        edit.set_cursor(cursor.cursor);
+        edit.set_cursor(self.cursor.cursor);
         edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
-        let new_cursor = edit.cursor();
-
-        self.update_cursor_before_glyph_with_cursor(new_cursor);
+        self.update_cursor_before_glyph_with_cursor(edit.cursor());
 
         ActionResult::CursorUpdated
     }
@@ -706,11 +693,7 @@ impl TextState {
         res
     }
 
-    fn insert_character_before_cursor(
-        &mut self,
-        character: &SmolStr,
-        ctx: &mut TextContext,
-    ) -> ActionResult {
+    fn insert_character(&mut self, character: &SmolStr, ctx: &mut TextContext) -> ActionResult {
         if self.is_text_selected() {
             self.move_cursor(ctx, Motion::Left);
             self.remove_selected_text();
@@ -731,14 +714,11 @@ impl TextState {
                     Action::Paste(text) => self.paste_text_at_cursor(ctx, text),
                     Action::Cut => self.cut_selected_text(ctx),
                     Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
-                    Action::InsertWhitespace => self.insert_whitespace_at_cursor(ctx),
                     Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                     Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
                     Action::MoveCursorUp => self.move_cursor_recalculate(ctx, Motion::Up),
                     Action::MoveCursorDown => self.move_cursor_recalculate(ctx, Motion::Down),
-                    Action::InsertChar(character) => {
-                        self.insert_character_before_cursor(character, ctx)
-                    }
+                    Action::InsertChar(character) => self.insert_character(character, ctx),
                     _ => ActionResult::None,
                 }
             } else {
@@ -770,7 +750,7 @@ impl TextState {
         if self.is_selectable || self.is_editable {
             self.reset_selection();
 
-            let byte_offset_cursor = text_manager.glyph_under_position(
+            let byte_offset_cursor = text_manager.char_under_position(
                 self,
                 font_system,
                 click_position_relative_to_area,
@@ -778,7 +758,7 @@ impl TextState {
             self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
 
             // Reset selection to start at the press location
-            self.selection.origin_character_byte_cursor = Some(self.cursor_before_glyph);
+            self.selection.origin_character_byte_cursor = Some(self.cursor);
             self.selection.ends_before_character_byte_cursor = None;
 
             self.recalculate(text_context, false, UpdateReason::MoveCaret);
@@ -801,7 +781,7 @@ impl TextState {
         let font_system = &mut ctx.font_system;
         if self.is_selectable {
             let byte_cursor_under_position =
-                text_manager.glyph_under_position(self, font_system, pointer_relative_position)?;
+                text_manager.char_under_position(self, font_system, pointer_relative_position)?;
 
             // let byte_cursor_char_index =
             //     byte_offset_cursor_to_char_index(self.text(), byte_cursor_under_position)?;
