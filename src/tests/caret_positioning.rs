@@ -9,11 +9,11 @@ pub fn test() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
     let mono_width = ctx
         .text_manager
@@ -59,11 +59,10 @@ pub fn test_cyrillic() {
     let initial_text = "Привет Мир".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
-    text_state.is_editable = true;
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));    text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
     let mono_width = ctx
         .text_manager
@@ -130,11 +129,10 @@ pub fn test_insert_into_empty_text() {
     let initial_text = "".to_string(); // Empty text
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
-    text_state.is_editable = true;
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));    text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Verify initial state
@@ -176,11 +174,11 @@ pub fn test_delete_at_end_of_text() {
     let initial_text = "Hello".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Move cursor to the end of the text

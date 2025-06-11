@@ -9,11 +9,12 @@ pub fn test_copy_empty_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // No selection, cursor at the beginning
@@ -32,11 +33,11 @@ pub fn test_copy_partial_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Set up a selection by clicking and dragging
@@ -64,11 +65,11 @@ pub fn test_copy_full_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Select all text
@@ -91,11 +92,11 @@ pub fn test_copy_cyrillic_text() {
     let initial_text = "Привет Мир".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Set up a selection by clicking and dragging
@@ -123,11 +124,13 @@ pub fn test_copy_after_editing() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    text_state.text_style = mono_style_test();
+    text_state.params.set_style(mono_style_test());
+    text_state.params.set_size(Rect::from(((0.0, 0.0), (200.0, 25.0))));
+    
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    text_state.text_area = Rect::from(((0.0, 0.0), (200.0, 25.0)));
+    
     text_state.recalculate(&mut ctx, true, UpdateReason::Unknown);
 
     // Insert text at the beginning

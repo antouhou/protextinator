@@ -1,6 +1,6 @@
 use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect};
-use crate::state::TextState;
+use crate::state::{TextParams, TextState};
 use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, VerticalTextAlignment};
@@ -85,7 +85,7 @@ impl TextManager {
         font_system: &mut FontSystem,
         interaction_position_relative_to_element: Point,
     ) -> Option<Cursor> {
-        let buffer = self.buffer_no_retain_mut(&state.text_buffer_id)?;
+        let buffer = self.buffer_no_retain_mut(&state.params.buffer_id())?;
         let horizontal_scroll = buffer.scroll().horizontal;
         let byte_offset_cursor = buffer.hit(
             interaction_position_relative_to_element.x + horizontal_scroll,
@@ -182,20 +182,15 @@ impl TextManager {
 
     pub fn create_and_shape_text_if_not_in_cache(
         &mut self,
-        text: &str,
-        text_style: &TextStyle,
-        buffer_id: Id,
-        element_area: Rect,
+        params: &TextParams,
         font_system: &mut FontSystem,
         reshape: bool,
     ) {
-        let buffer_not_in_cache = self.buffer_no_retain(&buffer_id).is_none();
+        let buffer_not_in_cache = self.buffer_no_retain(&params.buffer_id()).is_none();
         if buffer_not_in_cache || reshape {
+            println!("Shaping: {:?}", params.buffer_id());
             self.create_and_shape_text_buffer(
-                text,
-                text_style,
-                buffer_id,
-                element_area,
+                params,
                 font_system,
                 None,
             );
@@ -204,18 +199,16 @@ impl TextManager {
 
     pub fn create_and_shape_text_buffer(
         &mut self,
-        text: &str,
-        text_style: &TextStyle,
-        buffer_id: Id,
-        element_area: Rect,
+        params: &TextParams,
         font_system: &mut FontSystem,
         cursor: Option<cosmic_text::Cursor>,
     ) {
+        let text_style = &params.style();
         let font_color = text_style.font_color;
 
-        let horizontal_alignment = text_style.horizontal_alignment;
+        let horizontal_alignment = params.style().horizontal_alignment;
 
-        let text_area_size = element_area.size();
+        let text_area_size = params.size();
 
         let metrics = Metrics::new(text_style.font_size.0, text_style.line_height_pt());
         let mut buffer = Buffer::new(font_system, metrics);
@@ -223,15 +216,15 @@ impl TextManager {
 
         let font_family = &text_style.font_family;
 
-        buffer.set_size(font_system, Some(text_area_size.0), Some(text_area_size.1));
+        buffer.set_size(font_system, Some(text_area_size.x), Some(text_area_size.y));
 
         buffer.set_text(
             font_system,
-            text,
+            params.text(),
             &Attrs::new()
                 .color(font_color.into())
                 .family(font_family.to_fontdb_family())
-                .metadata(buffer_id.0 as usize),
+                .metadata(params.buffer_id().0 as usize),
             Shaping::Advanced,
         );
 
@@ -245,7 +238,7 @@ impl TextManager {
             buffer.shape_until_scroll(font_system, false);
         }
 
-        self.insert_buffer(buffer_id, buffer);
+        self.insert_buffer(params.buffer_id(), buffer);
     }
 }
 

@@ -101,9 +101,17 @@ impl ByteCursor {
         }
     }
 
+    pub fn prev_char_byte_offset_or_bound(&self, string: &str) -> usize {
+        previous_char_byte_offset_or_bound(string, self.byte_character_start)
+    }
+    
+    fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {
+        previous_char_byte_offset(string, self.byte_character_start)
+    }
+
     pub fn prev_char_cursor(&self, string: &str) -> Option<ByteCursor> {
         Self::from_byte_offset(
-            previous_char_byte_offset(string, self.byte_character_start)?,
+            self.prev_char_byte_offset(string)?,
             string,
         )
     }
@@ -214,6 +222,23 @@ fn previous_char_byte_offset(text: &str, current: usize) -> Option<usize> {
         .char_indices()
         .last()
         .map(|(byte_idx, _ch)| byte_idx)
+}
+
+fn previous_char_byte_offset_or_bound(text: &str, current: usize) -> usize {
+    if current == 0 {
+        return 0;
+    }
+    if current > text.len() {
+        return text.len();
+    }
+
+    // take everything up to `current`, iterate its character indices,
+    // and pick the last one
+    text[..current]
+        .char_indices()
+        .last()
+        .map(|(byte_idx, _ch)| byte_idx)
+        .expect("current is within bounds, so there must be a previous char")
 }
 
 pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {

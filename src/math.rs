@@ -43,6 +43,14 @@ pub struct Point {
     pub y: f32,
 }
 
+impl Point {
+    pub fn to_tuple(self) -> (f32, f32) {
+        (self.x, self.y)
+    }
+}
+
+pub type Size = Point;
+
 impl From<(f32, f32)> for Point {
     fn from((x, y): (f32, f32)) -> Self {
         Self { x, y }

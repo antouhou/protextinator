@@ -7,6 +7,7 @@ use crate::{Id, Point, Rect};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
+use crate::math::Size;
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
@@ -22,14 +23,128 @@ pub struct Selection {
     pub lines: Vec<SelectionLine>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextParams {
+    size: Size,
+    style: TextStyle,
+    text: String,
+    buffer_id: Id,
+
+    changed: bool,
+}
+
+impl TextParams {
+    #[inline(always)]
+    pub fn new(size: Size, style: TextStyle, text: String, buffer_id: Id) -> Self {
+        Self {
+            size,
+            style,
+            text,
+            buffer_id,
+
+            changed: true
+        }
+    }
+
+    /// Updates the text parameters with new values if they differ from the current ones and
+    /// marks the parameters as changed if any of the values changed.
+    #[inline(always)]
+    pub fn update(
+        &mut self,
+        size: &Size,
+        style: &TextStyle,
+        text: &str,
+        buffer_id: &Id,
+    ) {
+        self.set_size(size);
+        self.set_style(style);
+        self.set_text(text);
+        self.set_buffer_id(buffer_id);
+    }
+
+    #[inline(always)]
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
+    #[inline(always)]
+    pub fn style(&self) -> &TextStyle {
+        &self.style
+    }
+
+    #[inline(always)]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    #[inline(always)]
+    pub fn buffer_id(&self) -> Id {
+        self.buffer_id
+    }
+
+    #[inline(always)]
+    pub fn changed_since_last_shape(&self) -> bool {
+        self.changed
+    }
+
+    #[inline(always)]
+    pub fn reset_changed(&mut self) {
+        self.changed = false;
+    }
+
+    #[inline(always)]
+    pub fn set_text(&mut self, text: &str) {
+        if &self.text != text {
+            self.text = text.into();
+            self.changed = true;
+        }
+    }
+
+    #[inline(always)]
+    pub fn set_size(&mut self, size: &Size) {
+        if &self.size != size {
+            self.size = *size;
+            self.changed = true;
+        }
+    }
+
+    #[inline(always)]
+    pub fn set_style(&mut self, style: &TextStyle) {
+        if &self.style != style {
+            self.style = style.clone();
+            self.changed = true;
+        }
+    }
+
+    #[inline(always)]
+    pub fn set_buffer_id(&mut self, buffer_id: &Id) {
+        if &self.buffer_id != buffer_id {
+            self.buffer_id = *buffer_id;
+            self.changed = true;
+        }
+    }
+}
+
+// pub struct CalculatedProperties {
+//     pub relative_caret_offset_horizontal: f32,
+//     pub relative_caret_offset_vertical: f32,
+//     /// The number of characters in the text.
+//     text_size: usize,
+//     /// The horizontal offset of the text inside the buffer. It is needed since horizontal scrolling
+//     ///  in cosmic_text does not seem to work.
+//     pub scroll: Scroll,
+// }
+
 pub struct TextState {
     pub is_first_run: bool,
-    text: String,
+
+    pub params: TextParams,
 
     pub cursor: ByteCursor,
 
     pub relative_caret_offset_horizontal: f32,
     pub relative_caret_offset_vertical: f32,
+
     pub caret_width: f32,
     /// The horizontal offset of the text inside the buffer. It is needed since horizontal scrolling
     ///  in cosmic_text does not seem to work.
@@ -39,16 +154,12 @@ pub struct TextState {
 
     pub selection: Selection,
 
-    pub last_scroll_timestamp: Instant,
-    pub scroll_interval: Duration,
-
-    pub text_style: TextStyle,
-    pub text_area: Rect,
-    pub(crate) text_buffer_id: Id,
-
+    // Settings
     pub is_selectable: bool,
     pub is_editable: bool,
     pub is_editing: bool,
+    pub last_scroll_timestamp: Instant,
+    pub scroll_interval: Duration,
 }
 
 impl TextState {
@@ -58,7 +169,13 @@ impl TextState {
 
         Self {
             is_first_run: true,
-            text,
+            params: TextParams::new(
+                Size::default(),
+                TextStyle::default(),
+                text,
+                text_buffer_id,
+            ),
+
             is_editing: false,
 
             cursor: ByteCursor::default(),
@@ -70,9 +187,6 @@ impl TextState {
             selection: Selection::default(),
             last_scroll_timestamp: Instant::now(),
             scroll_interval: Duration::from_millis(50),
-            text_area: Rect::default(),
-            text_style: TextStyle::default(),
-            text_buffer_id,
             caret_width: 3.0,
             is_selectable: false,
             is_editable: false,
@@ -84,18 +198,18 @@ impl TextState {
     }
 
     pub fn set_text(&mut self, text: impl Into<String>, ctx: &mut TextContext) {
-        self.text = text.into();
-        self.text_size = self.text.chars().count();
+        self.params.text = text.into();
+        self.text_size = self.params.text.chars().count();
 
         self.shape_if_not_shaped(ctx, false);
 
-        if self.cursor.byte_character_start > self.text.len() {
+        if self.cursor.byte_character_start > self.params.text.len() {
             self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
 
     pub fn text(&self) -> &str {
-        &self.text
+        &self.params.text
     }
 
     pub fn text_size(&self) -> usize {
@@ -105,19 +219,17 @@ impl TextState {
     pub fn insert_char_at_cursor(
         &mut self,
         character: char,
-        ctx: &mut TextContext,
     ) -> ActionResult {
-        self.text
-            .insert(self.cursor.byte_character_start, character);
+        self.params.text.insert(self.cursor.byte_character_start, character);
         self.text_size += 1;
         // TODO: wouldn't it be faster to just use set_byte_offset function here?
-        self.move_cursor(ctx, Motion::Next);
+        self.cursor.move_to_next_char(&self.params.text);
         ActionResult::TextChanged
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        self.text.insert_str(self.cursor.byte_character_start, text);
-        self.text_size = self.text.chars().count();
+        self.params.text.insert_str(self.cursor.byte_character_start, text);
+        self.text_size += text.chars().count();
         self.update_cursor_before_glyph_with_bytes_offset(
             self.cursor.byte_character_start + text.len(),
         );
@@ -125,7 +237,7 @@ impl TextState {
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.text.is_empty() && self.cursor.byte_character_start > 0 {
+        if !self.params.text.is_empty() && self.cursor.byte_character_start > 0 {
             let char = self.remove_character(self.cursor.byte_character_start);
             self.update_cursor_before_glyph_with_bytes_offset(
                 self.cursor.byte_character_start - char.len_utf8(),
@@ -134,7 +246,7 @@ impl TextState {
     }
 
     pub fn remove_characters(&mut self, byte_offset_start: usize, byte_offset_end: usize) {
-        self.text
+        self.params.text
             .replace_range(byte_offset_start..byte_offset_end, "");
     }
 
@@ -143,16 +255,16 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor.update_cursor(cursor, &self.text);
+        self.cursor.update_cursor(cursor, &self.params.text);
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor.update_byte_offset(byte_offset, &self.text);
+        self.cursor.update_byte_offset(byte_offset, &self.params.text);
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> char {
-        let char = self.text.remove(byte_offset);
-        self.text_size = self.text.chars().count();
+        let char = self.params.text.remove(byte_offset);
+        self.text_size = self.params.text.chars().count();
         char
     }
 
@@ -229,9 +341,9 @@ impl TextState {
 
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
-        if !self.text.is_empty() {
+        if !self.params.text.is_empty() {
             self.selection.ends_before_character_byte_cursor =
-                Some(ByteCursor::after_last_character(&self.text))
+                Some(ByteCursor::after_last_character(&self.params.text))
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }
@@ -239,7 +351,7 @@ impl TextState {
 
     pub fn substring_byte_offset(&self, start: usize, end: usize) -> String {
         // TODO: add bounds checking
-        self.text[start..end].to_string()
+        self.params.text[start..end].to_string()
     }
 
     pub fn selected_text(&self) -> Option<String> {
@@ -259,10 +371,7 @@ impl TextState {
     pub fn shape_if_not_shaped(&self, ctx: &mut TextContext, reshape: bool) {
         let font_system = &mut ctx.font_system;
         ctx.text_manager.create_and_shape_text_if_not_in_cache(
-            &self.text,
-            &self.text_style,
-            self.text_buffer_id,
-            self.text_area,
+            &self.params,
             font_system,
             reshape,
         );
@@ -372,21 +481,17 @@ impl TextState {
         None
     }
 
-    pub fn text_area(&self) -> Rect {
-        self.text_area
-    }
-
     /// DO NOT PASS VALUES FROM THE STATE TO THIS FUNCTION
     pub fn update_and_recalculate(
         &mut self,
-        text_area: impl Into<Rect>,
-        text_style: TextStyle,
+        text_area: impl Into<Size>,
+        text_style: &TextStyle,
         ctx: &mut TextContext,
         reshape: bool,
     ) {
         // Update the text area
-        self.text_area = text_area.into();
-        self.text_style = text_style;
+        self.params.set_size(&text_area.into());
+        self.params.set_style(text_style);
 
         self.recalculate(ctx, reshape, UpdateReason::Unknown);
     }
@@ -397,8 +502,7 @@ impl TextState {
         reshape: bool,
         update_reason: UpdateReason,
     ) {
-        let text_area = self.text_area;
-        let text_buffer_id = self.text_buffer_id;
+        let text_buffer_id = self.params.buffer_id();
 
         self.shape_if_not_shaped(ctx, reshape);
 
@@ -407,30 +511,38 @@ impl TextState {
             .buffer_no_retain_mut(&text_buffer_id)
             .unwrap();
 
-        self.recalculate_caret_position_and_scroll(text_area, buffer, update_reason);
-        self.update_buffer_size_to_match_element(buffer, text_area, &mut ctx.font_system);
+        self.recalculate_caret_position_and_scroll(self.params.size(), buffer, update_reason);
+        self.update_buffer_size_to_match_element(buffer, self.params.size(), &mut ctx.font_system);
         self.recalculate_selection_area(buffer, &mut ctx.font_system);
+    }
+
+    pub fn recalculate_and_reshape_if_needed(&mut self, ctx: &mut TextContext) {
+        let params_changed = self.params.changed_since_last_shape();
+        self.reshape_if_params_changed(ctx);
+        if params_changed {
+            self.recalculate(ctx, false, UpdateReason::Unknown);
+        }
     }
 
     fn update_buffer_size_to_match_element(
         &self,
         buffer: &mut Buffer,
-        area: impl Into<Rect>,
+        size: impl Into<Size>,
         font_system: &mut FontSystem,
     ) {
-        let area = area.into();
+        let size = size.into();
         let scroll = buffer.scroll();
         // TODO: since horizontal scrolling does not appear to work in cosmic_text right
         //  now, we use this hack to scroll the text horizontally
-        let text_area = Rect::new(
-            (area.min.x - scroll.horizontal, area.min.y).into(),
-            area.max,
-        );
+        // let text_area = Rect::new(
+        //     (area.min.x - scroll.horizontal, area.min.y).into(),
+        //     area.max,
+        // );
 
         buffer.set_size(
             font_system,
-            Some(text_area.width()),
-            Some(text_area.height()),
+            Some(size.x),
+            Some(size.y),
         );
 
         // Setting size resets the scroll, so we need to set it back
@@ -439,14 +551,14 @@ impl TextState {
 
     pub fn recalculate_caret_position_and_scroll(
         &mut self,
-        text_area: Rect,
+        text_area_size: Size,
         buffer: &mut Buffer,
         update_reason: UpdateReason,
     ) -> Option<()> {
         let old_scroll = self.scroll;
         let mut new_scroll = old_scroll;
         let vertical_scroll_to_align_text =
-            calculate_vertical_offset(&self.text_style, text_area, buffer);
+            calculate_vertical_offset(self.params.style(), text_area_size, buffer);
 
         if self.is_editing {
             let caret_position_relative_to_buffer =
@@ -454,7 +566,7 @@ impl TextState {
 
             let current_relative_caret_offset = self.relative_caret_offset_horizontal;
 
-            let text_area_width = text_area.width();
+            let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
@@ -601,12 +713,17 @@ impl TextState {
 
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
         ctx.text_manager
-            .buffer_no_retain(&self.text_buffer_id)
+            .buffer_no_retain(&self.params.buffer_id)
             .is_none()
     }
 
-    pub fn size_changed(&self, text_area: (f32, f32)) -> bool {
-        self.text_area.size() != text_area
+    pub fn size_changed(&self, text_area: Size) -> bool {
+        self.params.size() != text_area
+    }
+
+    pub fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
+        self.shape_if_not_shaped(ctx, self.params.changed_since_last_shape());
+        self.params.reset_changed();
     }
 
     fn copy_selected_text(&mut self) -> ActionResult {
@@ -674,7 +791,7 @@ impl TextState {
     }
 
     fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
-        let Some(buffer) = ctx.text_manager.buffer_no_retain_mut(&self.text_buffer_id) else {
+        let Some(buffer) = ctx.text_manager.buffer_no_retain_mut(&self.params.buffer_id()) else {
             return ActionResult::None;
         };
 
@@ -699,7 +816,7 @@ impl TextState {
             self.remove_selected_text();
         }
         for character in character.chars() {
-            self.insert_char_at_cursor(character, ctx);
+            self.insert_char_at_cursor(character);
             self.reset_selection_end();
         }
 
@@ -795,10 +912,10 @@ impl TextState {
                     if let Some(selection) =
                         self.selection.ends_before_character_byte_cursor.as_mut()
                     {
-                        selection.update_cursor(byte_cursor_under_position, &self.text);
+                        selection.update_cursor(byte_cursor_under_position, self.params.text());
                     } else {
                         self.selection.ends_before_character_byte_cursor =
-                            ByteCursor::from_cursor(byte_cursor_under_position, &self.text);
+                            ByteCursor::from_cursor(byte_cursor_under_position, self.params.text());
                     }
                 }
             }
@@ -806,9 +923,9 @@ impl TextState {
             // Simple debounce to make scroll speed consistent
             let now = std::time::Instant::now();
             if now > self.last_scroll_timestamp + self.scroll_interval && is_dragging {
-                let element_area = self.text_area();
-                let is_dragging_to_the_right = pointer_absolute_position.x > element_area.max.x;
-                let is_dragging_to_the_left = pointer_absolute_position.x < element_area.min.x;
+                let element_area = self.params.size();
+                let is_dragging_to_the_right = pointer_relative_position.x > 0.0;
+                let is_dragging_to_the_left = pointer_relative_position.x < element_area.x;
 
                 if is_dragging_to_the_right || is_dragging_to_the_left {
                     self.update_cursor_before_glyph_with_cursor(byte_cursor_under_position);
@@ -825,9 +942,8 @@ impl TextState {
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
 ///  needed to align the text vertically.
-fn calculate_vertical_offset(text_style: &TextStyle, text_area: Rect, buffer: &Buffer) -> f32 {
-    let area = text_area;
-    let normalized_area = Rect::new((0.0, 0.0).into(), (area.width(), area.height()).into());
+fn calculate_vertical_offset(text_style: &TextStyle, text_area_size: Size, buffer: &Buffer) -> f32 {
+    let normalized_area = Rect::new((0.0, 0.0).into(), text_area_size).into();
     let style = text_style;
 
     let vertical_alignment = style.vertical_alignment;
