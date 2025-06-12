@@ -1,9 +1,9 @@
 use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect};
-use crate::state::{TextParams, TextState};
+use crate::state::TextState;
 use crate::style::TextStyle;
 use crate::style::TextWrap;
-use crate::{Id, VerticalTextAlignment};
+use crate::{Id, TextParams, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
 use cosmic_text::{
     Attrs, Buffer, Cursor, Edit, Editor, FontSystem, LayoutCursor, Metrics, Shaping,
@@ -188,7 +188,6 @@ impl TextManager {
     ) {
         let buffer_not_in_cache = self.buffer_no_retain(&params.buffer_id()).is_none();
         if buffer_not_in_cache || reshape {
-            println!("Shaping: {:?}", params.buffer_id());
             self.create_and_shape_text_buffer(
                 params,
                 font_system,

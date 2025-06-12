@@ -5,18 +5,22 @@ pub struct Rect {
 }
 
 impl Rect {
+    #[inline(always)]
     pub fn new(min: Point, max: Point) -> Self {
         Self { min, max }
     }
 
+    #[inline(always)]
     pub fn height(&self) -> f32 {
         self.max.y - self.min.y
     }
 
+    #[inline(always)]
     pub fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
 
+    #[inline(always)]
     pub fn size(&self) -> (f32, f32) {
         (self.width(), self.height())
     }
@@ -44,8 +48,14 @@ pub struct Point {
 }
 
 impl Point {
+    #[inline(always)]
     pub fn to_tuple(self) -> (f32, f32) {
         (self.x, self.y)
+    }
+
+    #[inline(always)]
+    pub fn approx_eq(&self, other: &Self, epsilon: f32) -> bool {
+        (self.x - other.x).abs() <= epsilon && (self.y - other.y).abs() <= epsilon
     }
 }
 

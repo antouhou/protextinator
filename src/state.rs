@@ -3,11 +3,13 @@ use crate::byte_cursor::ByteCursor;
 use crate::ctx::TextContext;
 use crate::style::TextStyle;
 use crate::text::{buffer_height, calculate_caret_position_pt, vertical_offset};
-use crate::{Id, Point, Rect};
+use crate::{Id, Point, Rect, TextParams};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
 use crate::math::Size;
+
+pub const SIZE_EPSILON: f32 = 0.0001;
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
@@ -21,108 +23,6 @@ pub struct Selection {
     pub origin_character_byte_cursor: Option<ByteCursor>,
     pub ends_before_character_byte_cursor: Option<ByteCursor>,
     pub lines: Vec<SelectionLine>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextParams {
-    size: Size,
-    style: TextStyle,
-    text: String,
-    buffer_id: Id,
-
-    changed: bool,
-}
-
-impl TextParams {
-    #[inline(always)]
-    pub fn new(size: Size, style: TextStyle, text: String, buffer_id: Id) -> Self {
-        Self {
-            size,
-            style,
-            text,
-            buffer_id,
-
-            changed: true
-        }
-    }
-
-    /// Updates the text parameters with new values if they differ from the current ones and
-    /// marks the parameters as changed if any of the values changed.
-    #[inline(always)]
-    pub fn update(
-        &mut self,
-        size: &Size,
-        style: &TextStyle,
-        text: &str,
-        buffer_id: &Id,
-    ) {
-        self.set_size(size);
-        self.set_style(style);
-        self.set_text(text);
-        self.set_buffer_id(buffer_id);
-    }
-
-    #[inline(always)]
-    pub fn size(&self) -> Size {
-        self.size
-    }
-
-    #[inline(always)]
-    pub fn style(&self) -> &TextStyle {
-        &self.style
-    }
-
-    #[inline(always)]
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
-    #[inline(always)]
-    pub fn buffer_id(&self) -> Id {
-        self.buffer_id
-    }
-
-    #[inline(always)]
-    pub fn changed_since_last_shape(&self) -> bool {
-        self.changed
-    }
-
-    #[inline(always)]
-    pub fn reset_changed(&mut self) {
-        self.changed = false;
-    }
-
-    #[inline(always)]
-    pub fn set_text(&mut self, text: &str) {
-        if &self.text != text {
-            self.text = text.into();
-            self.changed = true;
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_size(&mut self, size: &Size) {
-        if &self.size != size {
-            self.size = *size;
-            self.changed = true;
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_style(&mut self, style: &TextStyle) {
-        if &self.style != style {
-            self.style = style.clone();
-            self.changed = true;
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_buffer_id(&mut self, buffer_id: &Id) {
-        if &self.buffer_id != buffer_id {
-            self.buffer_id = *buffer_id;
-            self.changed = true;
-        }
-    }
 }
 
 // pub struct CalculatedProperties {
@@ -197,19 +97,19 @@ impl TextState {
         self.caret_width = width;
     }
 
-    pub fn set_text(&mut self, text: impl Into<String>, ctx: &mut TextContext) {
-        self.params.text = text.into();
-        self.text_size = self.params.text.chars().count();
+    pub fn set_text(&mut self, text: &str, ctx: &mut TextContext) {
+        self.params.set_text(text);
+        self.text_size = self.params.text().chars().count();
 
         self.shape_if_not_shaped(ctx, false);
 
-        if self.cursor.byte_character_start > self.params.text.len() {
+        if self.cursor.byte_character_start > self.params.text().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
 
     pub fn text(&self) -> &str {
-        &self.params.text
+        self.params.text()
     }
 
     pub fn text_size(&self) -> usize {
@@ -219,16 +119,18 @@ impl TextState {
     pub fn insert_char_at_cursor(
         &mut self,
         character: char,
+        ctx: &mut TextContext,
     ) -> ActionResult {
-        self.params.text.insert(self.cursor.byte_character_start, character);
+        self.params.insert_char(self.cursor.byte_character_start, character);
+        self.reshape_if_params_changed(ctx);
+        self.move_cursor(ctx, Motion::Next);
+
         self.text_size += 1;
-        // TODO: wouldn't it be faster to just use set_byte_offset function here?
-        self.cursor.move_to_next_char(&self.params.text);
         ActionResult::TextChanged
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        self.params.text.insert_str(self.cursor.byte_character_start, text);
+        self.params.insert_str(self.cursor.byte_character_start, text);
         self.text_size += text.chars().count();
         self.update_cursor_before_glyph_with_bytes_offset(
             self.cursor.byte_character_start + text.len(),
@@ -237,17 +139,16 @@ impl TextState {
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.params.text.is_empty() && self.cursor.byte_character_start > 0 {
-            let char = self.remove_character(self.cursor.byte_character_start);
-            self.update_cursor_before_glyph_with_bytes_offset(
-                self.cursor.byte_character_start - char.len_utf8(),
-            );
+        if !self.params.text().is_empty() {
+            if let Some(prev_char) = self.cursor.prev_char_byte_offset(self.params.text()) {
+                self.remove_character(prev_char);
+                self.cursor.update_byte_offset(prev_char, self.params.text());
+            }
         }
     }
 
     pub fn remove_characters(&mut self, byte_offset_start: usize, byte_offset_end: usize) {
-        self.params.text
-            .replace_range(byte_offset_start..byte_offset_end, "");
+        self.params.remove_range(byte_offset_start, byte_offset_end);
     }
 
     pub fn set_cursor_before_glyph(&mut self, cursor: ByteCursor) {
@@ -255,16 +156,16 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor.update_cursor(cursor, &self.params.text);
+        self.cursor.update_cursor(cursor, self.params.text());
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor.update_byte_offset(byte_offset, &self.params.text);
+        self.cursor.update_byte_offset(byte_offset, self.params.text());
     }
 
-    pub fn remove_character(&mut self, byte_offset: usize) -> char {
-        let char = self.params.text.remove(byte_offset);
-        self.text_size = self.params.text.chars().count();
+    pub fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
+        let char = self.params.remove_char(byte_offset);
+        self.text_size = self.params.text().chars().count();
         char
     }
 
@@ -341,9 +242,9 @@ impl TextState {
 
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
-        if !self.params.text.is_empty() {
+        if !self.params.text().is_empty() {
             self.selection.ends_before_character_byte_cursor =
-                Some(ByteCursor::after_last_character(&self.params.text))
+                Some(ByteCursor::after_last_character(self.params.text()))
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }
@@ -351,7 +252,7 @@ impl TextState {
 
     pub fn substring_byte_offset(&self, start: usize, end: usize) -> String {
         // TODO: add bounds checking
-        self.params.text[start..end].to_string()
+        self.params.text()[start..end].to_string()
     }
 
     pub fn selected_text(&self) -> Option<String> {
@@ -481,30 +382,14 @@ impl TextState {
         None
     }
 
-    /// DO NOT PASS VALUES FROM THE STATE TO THIS FUNCTION
-    pub fn update_and_recalculate(
-        &mut self,
-        text_area: impl Into<Size>,
-        text_style: &TextStyle,
-        ctx: &mut TextContext,
-        reshape: bool,
-    ) {
-        // Update the text area
-        self.params.set_size(&text_area.into());
-        self.params.set_style(text_style);
-
-        self.recalculate(ctx, reshape, UpdateReason::Unknown);
-    }
-
     pub fn recalculate(
         &mut self,
         ctx: &mut TextContext,
-        reshape: bool,
         update_reason: UpdateReason,
     ) {
         let text_buffer_id = self.params.buffer_id();
-
-        self.shape_if_not_shaped(ctx, reshape);
+        
+        self.reshape_if_params_changed(ctx);
 
         let buffer = ctx
             .text_manager
@@ -520,7 +405,7 @@ impl TextState {
         let params_changed = self.params.changed_since_last_shape();
         self.reshape_if_params_changed(ctx);
         if params_changed {
-            self.recalculate(ctx, false, UpdateReason::Unknown);
+            self.recalculate(ctx, UpdateReason::Unknown);
         }
     }
 
@@ -713,7 +598,7 @@ impl TextState {
 
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
         ctx.text_manager
-            .buffer_no_retain(&self.params.buffer_id)
+            .buffer_no_retain(&self.params.buffer_id())
             .is_none()
     }
 
@@ -738,20 +623,20 @@ impl TextState {
             self.reset_selection_end();
         }
 
-        self.recalculate(ctx, true, UpdateReason::InsertedText);
+        self.recalculate(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
     fn select_all_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.select_all();
-        self.recalculate(ctx, false, UpdateReason::SelectionChanged);
+        self.recalculate(ctx, UpdateReason::SelectionChanged);
         ActionResult::CursorUpdated
     }
 
     fn cut_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("".to_string());
         self.remove_selected_text();
-        self.recalculate(ctx, true, UpdateReason::DeletedTextAtCursor);
+        self.recalculate(ctx, UpdateReason::DeletedTextAtCursor);
         ActionResult::InsertToClipboard(selected_text)
     }
 
@@ -764,7 +649,7 @@ impl TextState {
         } else {
             self.remove_char_at_cursor();
         }
-        self.recalculate(ctx, true, UpdateReason::DeletedTextAtCursor);
+        self.recalculate(ctx, UpdateReason::DeletedTextAtCursor);
         ActionResult::TextChanged
     }
 
@@ -775,7 +660,7 @@ impl TextState {
             self.move_cursor(ctx, Motion::Right);
         }
         self.reset_selection();
-        self.recalculate(ctx, false, UpdateReason::MoveCaret);
+        self.recalculate(ctx, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -786,7 +671,7 @@ impl TextState {
             self.move_cursor(ctx, Motion::Left);
         }
         self.reset_selection();
-        self.recalculate(ctx, false, UpdateReason::MoveCaret);
+        self.recalculate(ctx, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -806,7 +691,7 @@ impl TextState {
     fn move_cursor_recalculate(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
         let res = self.move_cursor(ctx, motion);
         self.reset_selection();
-        self.recalculate(ctx, false, UpdateReason::MoveCaret);
+        self.recalculate(ctx, UpdateReason::MoveCaret);
         res
     }
 
@@ -816,11 +701,11 @@ impl TextState {
             self.remove_selected_text();
         }
         for character in character.chars() {
-            self.insert_char_at_cursor(character);
+            self.insert_char_at_cursor(character, ctx);
             self.reset_selection_end();
         }
 
-        self.recalculate(ctx, true, UpdateReason::InsertedText);
+        self.recalculate(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
@@ -878,7 +763,7 @@ impl TextState {
             self.selection.origin_character_byte_cursor = Some(self.cursor);
             self.selection.ends_before_character_byte_cursor = None;
 
-            self.recalculate(text_context, false, UpdateReason::MoveCaret);
+            self.recalculate(text_context, UpdateReason::MoveCaret);
         }
 
         None
@@ -933,7 +818,7 @@ impl TextState {
                 }
             }
 
-            self.recalculate(ctx, false, UpdateReason::MoveCaret);
+            self.recalculate(ctx, UpdateReason::MoveCaret);
         }
 
         None

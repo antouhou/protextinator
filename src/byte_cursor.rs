@@ -56,8 +56,10 @@ impl ByteCursor {
         let mut res = Self::string_start();
         let is_valid_byte_offset = res.update_byte_offset(byte_offset, string);
         if is_valid_byte_offset {
+            println!("Vaid!");
             Some(res)
         } else {
+            println!("Invalid!");
             None
         }
     }
@@ -105,7 +107,7 @@ impl ByteCursor {
         previous_char_byte_offset_or_bound(string, self.byte_character_start)
     }
     
-    fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {
+    pub fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {
         previous_char_byte_offset(string, self.byte_character_start)
     }
 
@@ -118,6 +120,7 @@ impl ByteCursor {
 
     //
     pub fn next_char_byte_offset(&self, string: &str) -> Option<usize> {
+        println!("next_char_byte_offset: {:?}", string[self.byte_character_start..].chars().next());
         // TODO: check bounds first
         string[self.byte_character_start..]
             .chars()
@@ -157,6 +160,25 @@ impl ByteCursor {
 }
 
 pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
+    // Handle the special case where char_byte_offset equals the string length
+    if char_byte_offset == full_text.len() {
+        // Find the last line and its length
+        let mut last_line_number = 0;
+        let mut last_line_len = 0;
+        
+        for (line_number, line) in full_text.lines().enumerate() {
+            last_line_number = line_number;
+            last_line_len = line.len();
+        }
+        
+        return Some(Cursor {
+            line: last_line_number,
+            index: last_line_len,
+            affinity: Affinity::Before,
+        });
+    }
+    
+    // Original logic for other cases
     let mut cumulative = 0;
     let mut line_heh = None;
     let mut char_heh = None;
@@ -252,13 +274,6 @@ pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option
                 // Base offset up to this line + index
                 char_byte_offset += cursor.index;
 
-                // If affinity is After, and there's a char at this position, advance past it
-                if cursor.affinity == Affinity::After && cursor.index < line.len() {
-                    if let Some(ch) = line[cursor.index..].chars().next() {
-                        char_byte_offset += ch.len_utf8();
-                    }
-                }
-
                 return Some(char_byte_offset);
             } else {
                 // Cursor index is out of bounds for this line
@@ -270,6 +285,7 @@ pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option
         char_byte_offset += line.len() + 1;
     }
 
+    println!("Very gay");
     // If cursor.line is beyond the available lines
     None
 }
