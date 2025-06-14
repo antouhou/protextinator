@@ -45,11 +45,7 @@ pub fn test_copy_partial_selection() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Hello"
-    text_state.handle_drag(
-        &mut ctx,
-        true,
-        Point { x: 40.0, y: 10.0 },
-    );
+    text_state.handle_drag(&mut ctx, true, Point { x: 40.0, y: 10.0 });
     assert!(text_state.is_text_selected());
 
     // Copy the selected text
@@ -103,11 +99,7 @@ pub fn test_copy_cyrillic_text() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Привет"
-    text_state.handle_drag(
-        &mut ctx,
-        true,
-        Point { x: 50.0, y: 10.0 },
-    );
+    text_state.handle_drag(&mut ctx, true, Point { x: 50.0, y: 10.0 });
     assert!(text_state.is_text_selected());
 
     // Copy the selected text
@@ -140,11 +132,7 @@ pub fn test_copy_after_editing() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
 
     // Simulate dragging to select "Test "
-    text_state.handle_drag(
-        &mut ctx,
-        true,
-        Point { x: 40.0, y: 10.0 },
-    );
+    text_state.handle_drag(&mut ctx, true, Point { x: 40.0, y: 10.0 });
     assert!(text_state.is_text_selected());
 
     // Copy the selected text
