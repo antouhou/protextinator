@@ -1,6 +1,6 @@
 use crate::state::UpdateReason;
 use crate::tests::mono_style_test;
-use crate::{Action, ActionResult, Id, Point, Rect, TextContext, TextState};
+use crate::{Action, ActionResult, Id, Point, TextContext, TextState};
 
 #[test]
 pub fn test() {
@@ -29,7 +29,7 @@ pub fn test() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(3));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 3.0
+        (mono_width * 3.0).floor()
     );
 
     let result = text_state.apply_action(&mut ctx, &Action::InsertChar("a".into()));
@@ -38,7 +38,7 @@ pub fn test() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(4));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 4.0
+        (mono_width * 4.0).floor()
     );
     assert_eq!(text_state.text(), "Helalo World");
 
@@ -48,7 +48,7 @@ pub fn test() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(5));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 5.0
+        (mono_width * 5.0).floor()
     );
 }
 
@@ -61,6 +61,7 @@ pub fn test_cyrillic() {
     let mut text_state = TextState::new_with_text(initial_text, text_id);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
@@ -81,7 +82,7 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(1));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 1.0
+        (mono_width * 1.0).floor()
     );
 
     let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
@@ -90,14 +91,14 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(2));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 2.0
+        (mono_width * 2.0).floor()
     );
 
     text_state.handle_press(&mut ctx, Point { x: 25.0, y: 10.0 });
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(3));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 3.0
+        (mono_width * 3.0).floor()
     );
 
     let result = text_state.apply_action(&mut ctx, &Action::InsertChar("ш".into()));
@@ -106,7 +107,7 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(4));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 4.0
+        (mono_width * 4.0).floor()
     );
     assert_eq!(text_state.text(), "Пришвет Мир");
 
@@ -116,7 +117,7 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(5));
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 5.0
+        (mono_width * 5.0).floor()
     );
 }
 
@@ -131,6 +132,7 @@ pub fn test_insert_into_empty_text() {
     let mut text_state = TextState::new_with_text(initial_text, text_id);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
@@ -161,7 +163,7 @@ pub fn test_insert_into_empty_text() {
         .width;
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
-        mono_width * 1.0
+        (mono_width * 1.0).floor()
     );
 }
 

@@ -40,8 +40,18 @@ pub fn test_char_byte_offset_to_cursor() {
     );
 
     // Test byte offset at the end of the string
-    // The function returns None for the end of the string
     let cursor = char_byte_offset_to_cursor(text, 11);
+    assert_eq!(
+        cursor,
+        Some(Cursor {
+            line: 0,
+            index: 11,
+            affinity: Affinity::Before
+        })
+    );
+
+    // Test byte offset beyond the end of the string
+    let cursor = char_byte_offset_to_cursor(text, 12);
     assert_eq!(cursor, None);
 
     // Test with a multi-line string
@@ -70,8 +80,18 @@ pub fn test_char_byte_offset_to_cursor() {
     );
 
     // Test byte offset at the end of the second line
-    // The function returns None for the end of the string
     let cursor = char_byte_offset_to_cursor(text, 11);
+    assert_eq!(
+        cursor,
+        Some(Cursor {
+            line: 1,
+            index: 5,
+            affinity: Affinity::Before,
+        })
+    );
+
+    // Test byte offset at the end of the second line
+    let cursor = char_byte_offset_to_cursor(text, 12);
     assert_eq!(cursor, None);
 
     // Test with an invalid byte offset (beyond the end of the string)
@@ -125,7 +145,8 @@ pub fn test_byte_offset_cursor_to_byte_offset() {
             affinity: Affinity::After,
         },
     );
-    assert_eq!(byte_offset, Some(5));
+    // Foe the byte offset, we don't really care about the affinity, so we can use either Before or After
+    assert_eq!(byte_offset, Some(4));
 
     // Test with a multi-line string
     let text = "Hello\nWorld";

@@ -1,6 +1,6 @@
 use crate::state::UpdateReason;
 use crate::tests::mono_style_test;
-use crate::{Action, ActionResult, Id, Point, Rect, TextContext, TextState};
+use crate::{Action, ActionResult, Id, Point, TextContext, TextState};
 
 #[test]
 pub fn test_copy_empty_selection() {
@@ -9,7 +9,7 @@ pub fn test_copy_empty_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id);
-    
+
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -48,7 +48,6 @@ pub fn test_copy_partial_selection() {
     text_state.handle_drag(
         &mut ctx,
         true,
-        Point { x: 40.0, y: 10.0 },
         Point { x: 40.0, y: 10.0 },
     );
     assert!(text_state.is_text_selected());
@@ -108,7 +107,6 @@ pub fn test_copy_cyrillic_text() {
         &mut ctx,
         true,
         Point { x: 50.0, y: 10.0 },
-        Point { x: 50.0, y: 10.0 },
     );
     assert!(text_state.is_text_selected());
 
@@ -126,11 +124,11 @@ pub fn test_copy_after_editing() {
     let mut text_state = TextState::new_with_text(initial_text, text_id);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
-    
+
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
-    
+
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 
     // Insert text at the beginning
@@ -145,7 +143,6 @@ pub fn test_copy_after_editing() {
     text_state.handle_drag(
         &mut ctx,
         true,
-        Point { x: 40.0, y: 10.0 },
         Point { x: 40.0, y: 10.0 },
     );
     assert!(text_state.is_text_selected());

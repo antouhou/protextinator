@@ -1,6 +1,6 @@
 use crate::math::Size;
-use crate::{Id, TextStyle};
 use crate::state::SIZE_EPSILON;
+use crate::{Id, TextStyle};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextParams {
@@ -21,20 +21,14 @@ impl TextParams {
             text,
             buffer_id,
 
-            changed: true
+            changed: true,
         }
     }
 
     /// Updates the text parameters with new values if they differ from the current ones and
     /// marks the parameters as changed if any of the values changed.
     #[inline(always)]
-    pub fn update(
-        &mut self,
-        size: &Size,
-        style: &TextStyle,
-        text: &str,
-        buffer_id: &Id,
-    ) {
+    pub fn update(&mut self, size: &Size, style: &TextStyle, text: &str, buffer_id: &Id) {
         self.set_size(size);
         self.set_style(style);
         self.set_text(text);
@@ -82,7 +76,7 @@ impl TextParams {
             None
         }
     }
-    
+
     #[inline(always)]
     pub fn remove_range(&mut self, start: usize, end: usize) {
         if start < end && end <= self.text.len() {
@@ -108,7 +102,7 @@ impl TextParams {
 
     #[inline(always)]
     pub fn set_text(&mut self, text: &str) {
-        if &self.text != text {
+        if self.text != text {
             self.text = text.into();
             self.changed = true;
         }

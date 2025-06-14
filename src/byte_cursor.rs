@@ -56,10 +56,8 @@ impl ByteCursor {
         let mut res = Self::string_start();
         let is_valid_byte_offset = res.update_byte_offset(byte_offset, string);
         if is_valid_byte_offset {
-            println!("Vaid!");
             Some(res)
         } else {
-            println!("Invalid!");
             None
         }
     }
@@ -106,21 +104,16 @@ impl ByteCursor {
     pub fn prev_char_byte_offset_or_bound(&self, string: &str) -> usize {
         previous_char_byte_offset_or_bound(string, self.byte_character_start)
     }
-    
+
     pub fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {
         previous_char_byte_offset(string, self.byte_character_start)
     }
 
     pub fn prev_char_cursor(&self, string: &str) -> Option<ByteCursor> {
-        Self::from_byte_offset(
-            self.prev_char_byte_offset(string)?,
-            string,
-        )
+        Self::from_byte_offset(self.prev_char_byte_offset(string)?, string)
     }
 
-    //
     pub fn next_char_byte_offset(&self, string: &str) -> Option<usize> {
-        println!("next_char_byte_offset: {:?}", string[self.byte_character_start..].chars().next());
         // TODO: check bounds first
         string[self.byte_character_start..]
             .chars()
@@ -165,19 +158,19 @@ pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> O
         // Find the last line and its length
         let mut last_line_number = 0;
         let mut last_line_len = 0;
-        
+
         for (line_number, line) in full_text.lines().enumerate() {
             last_line_number = line_number;
             last_line_len = line.len();
         }
-        
+
         return Some(Cursor {
             line: last_line_number,
             index: last_line_len,
             affinity: Affinity::Before,
         });
     }
-    
+
     // Original logic for other cases
     let mut cumulative = 0;
     let mut line_heh = None;
@@ -270,22 +263,21 @@ pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option
     for (line_number, line) in string.lines().enumerate() {
         if line_number == cursor.line {
             // Ensure index is within bounds
-            if cursor.index <= line.len() {
+            return if cursor.index <= line.len() {
                 // Base offset up to this line + index
                 char_byte_offset += cursor.index;
 
-                return Some(char_byte_offset);
+                Some(char_byte_offset)
             } else {
                 // Cursor index is out of bounds for this line
-                return None;
-            }
+                None
+            };
         }
 
         // Add line length plus 1 for the newline character
         char_byte_offset += line.len() + 1;
     }
 
-    println!("Very gay");
     // If cursor.line is beyond the available lines
     None
 }

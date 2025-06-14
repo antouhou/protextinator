@@ -132,13 +132,17 @@ impl<'a> App<'a> {
                 wrap: Some(TextWrap::Wrap),
                 font_family: FontFamily::SansSerif,
             };
+            
+            let params = protextinator::TextParams::new(
+                text_rect.size().into(),
+                text_style,
+                self.text_content.clone(),
+                text_id,
+            );
 
             // Use protextinator to shape and cache the text
             self.text_manager.create_and_shape_text_if_not_in_cache(
-                &self.text_content,
-                &text_style,
-                text_id,
-                text_rect,
+                &params,
                 font_system,
                 false,
             );
@@ -165,13 +169,13 @@ impl<'a> App<'a> {
 
             // Add a simple cursor indicator
             let cursor_line_estimate = (self.cursor_position as f32 / 60.0) as usize; // Rough estimate
-            let cursor_y = 60.0 + (cursor_line_estimate as f32 * text_style.line_height_pt());
+            let cursor_y = 60.0 + (cursor_line_estimate as f32 * params.style().line_height_pt());
             let cursor_x = 60.0 + ((self.cursor_position % 60) as f32 * 12.0); // Very rough approximation
 
             let cursor = Shape::rect(
                 [
                     (cursor_x, cursor_y),
-                    (cursor_x + 2.0, cursor_y + text_style.font_size.0),
+                    (cursor_x + 2.0, cursor_y + params.style().font_size.0),
                 ],
                 Color::rgb(97, 175, 239), // Blue cursor
                 Stroke::new(0.0, Color::TRANSPARENT),
@@ -205,13 +209,17 @@ impl<'a> App<'a> {
                     wrap: Some(TextWrap::Wrap),
                     font_family: FontFamily::Serif,
                 };
+                
+                let text_params = protextinator::TextParams::new(
+                    stats_rect.size().into(),
+                    stats_style,
+                    stats_text,
+                    stats_id
+                );
 
                 // Create another buffer using protextinator for the stats
                 self.text_manager.create_and_shape_text_if_not_in_cache(
-                    &stats_text,
-                    &stats_style,
-                    stats_id,
-                    stats_rect,
+                    &text_params,
                     font_system,
                     true, // Always reshape stats as they change
                 );

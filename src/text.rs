@@ -188,11 +188,7 @@ impl TextManager {
     ) {
         let buffer_not_in_cache = self.buffer_no_retain(&params.buffer_id()).is_none();
         if buffer_not_in_cache || reshape {
-            self.create_and_shape_text_buffer(
-                params,
-                font_system,
-                None,
-            );
+            self.create_and_shape_text_buffer(params, font_system, None);
         }
     }
 

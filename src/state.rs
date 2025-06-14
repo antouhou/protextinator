@@ -1,13 +1,13 @@
 use crate::action::{Action, ActionResult};
 use crate::byte_cursor::ByteCursor;
 use crate::ctx::TextContext;
+use crate::math::Size;
 use crate::style::TextStyle;
 use crate::text::{buffer_height, calculate_caret_position_pt, vertical_offset};
 use crate::{Id, Point, Rect, TextParams};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
-use crate::math::Size;
 
 pub const SIZE_EPSILON: f32 = 0.0001;
 
@@ -55,8 +55,11 @@ pub struct TextState {
     pub selection: Selection,
 
     // Settings
+    /// Can text be selected?
     pub is_selectable: bool,
+    /// Can text be edited?
     pub is_editable: bool,
+    /// If the text is editable, set this to true to allow editing.
     pub is_editing: bool,
     pub last_scroll_timestamp: Instant,
     pub scroll_interval: Duration,
@@ -69,12 +72,7 @@ impl TextState {
 
         Self {
             is_first_run: true,
-            params: TextParams::new(
-                Size::default(),
-                TextStyle::default(),
-                text,
-                text_buffer_id,
-            ),
+            params: TextParams::new(Size::default(), TextStyle::default(), text, text_buffer_id),
 
             is_editing: false,
 
@@ -121,7 +119,8 @@ impl TextState {
         character: char,
         ctx: &mut TextContext,
     ) -> ActionResult {
-        self.params.insert_char(self.cursor.byte_character_start, character);
+        self.params
+            .insert_char(self.cursor.byte_character_start, character);
         self.reshape_if_params_changed(ctx);
         self.move_cursor(ctx, Motion::Next);
 
@@ -130,7 +129,8 @@ impl TextState {
     }
 
     pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
-        self.params.insert_str(self.cursor.byte_character_start, text);
+        self.params
+            .insert_str(self.cursor.byte_character_start, text);
         self.text_size += text.chars().count();
         self.update_cursor_before_glyph_with_bytes_offset(
             self.cursor.byte_character_start + text.len(),
@@ -142,7 +142,8 @@ impl TextState {
         if !self.params.text().is_empty() {
             if let Some(prev_char) = self.cursor.prev_char_byte_offset(self.params.text()) {
                 self.remove_character(prev_char);
-                self.cursor.update_byte_offset(prev_char, self.params.text());
+                self.cursor
+                    .update_byte_offset(prev_char, self.params.text());
             }
         }
     }
@@ -160,7 +161,8 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor.update_byte_offset(byte_offset, self.params.text());
+        self.cursor
+            .update_byte_offset(byte_offset, self.params.text());
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
@@ -271,11 +273,8 @@ impl TextState {
 
     pub fn shape_if_not_shaped(&self, ctx: &mut TextContext, reshape: bool) {
         let font_system = &mut ctx.font_system;
-        ctx.text_manager.create_and_shape_text_if_not_in_cache(
-            &self.params,
-            font_system,
-            reshape,
-        );
+        ctx.text_manager
+            .create_and_shape_text_if_not_in_cache(&self.params, font_system, reshape);
     }
 
     /// Calculates physical selection area based on the selection start and end glyph indices
@@ -382,13 +381,9 @@ impl TextState {
         None
     }
 
-    pub fn recalculate(
-        &mut self,
-        ctx: &mut TextContext,
-        update_reason: UpdateReason,
-    ) {
+    pub fn recalculate(&mut self, ctx: &mut TextContext, update_reason: UpdateReason) {
         let text_buffer_id = self.params.buffer_id();
-        
+
         self.reshape_if_params_changed(ctx);
 
         let buffer = ctx
@@ -424,11 +419,7 @@ impl TextState {
         //     area.max,
         // );
 
-        buffer.set_size(
-            font_system,
-            Some(size.x),
-            Some(size.y),
-        );
+        buffer.set_size(font_system, Some(size.x), Some(size.y));
 
         // Setting size resets the scroll, so we need to set it back
         buffer.set_scroll(scroll);
@@ -676,7 +667,10 @@ impl TextState {
     }
 
     fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
-        let Some(buffer) = ctx.text_manager.buffer_no_retain_mut(&self.params.buffer_id()) else {
+        let Some(buffer) = ctx
+            .text_manager
+            .buffer_no_retain_mut(&self.params.buffer_id())
+        else {
             return ActionResult::None;
         };
 
@@ -774,7 +768,6 @@ impl TextState {
         ctx: &mut TextContext,
         is_dragging: bool,
         pointer_relative_position: Point,
-        pointer_absolute_position: Point,
     ) -> Option<()> {
         if !is_dragging {
             return None;
@@ -828,7 +821,7 @@ impl TextState {
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
 ///  needed to align the text vertically.
 fn calculate_vertical_offset(text_style: &TextStyle, text_area_size: Size, buffer: &Buffer) -> f32 {
-    let normalized_area = Rect::new((0.0, 0.0).into(), text_area_size).into();
+    let normalized_area = Rect::new((0.0, 0.0).into(), text_area_size);
     let style = text_style;
 
     let vertical_alignment = style.vertical_alignment;
