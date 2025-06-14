@@ -8,6 +8,7 @@ mod style;
 #[cfg(test)]
 mod tests;
 mod text;
+mod text_params;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;
@@ -17,3 +18,4 @@ pub use math::{Point, Rect};
 pub use state::{Selection, SelectionLine, TextState};
 pub use style::*;
 pub use text::{GlyphPosition, TextManager};
+pub use text_params::TextParams;

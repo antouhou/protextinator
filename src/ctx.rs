@@ -41,17 +41,11 @@ impl Kek {
         &mut self,
         text_id: Id,
         drag_position_relative: impl Into<Point>,
-        drag_position_absolute: impl Into<Point>,
         is_dragging: bool,
     ) -> Option<()> {
         if let Some(state) = self.text_states.get_mut(&text_id) {
             let text_manager = &mut self.text_context;
-            state.handle_drag(
-                text_manager,
-                is_dragging,
-                drag_position_relative.into(),
-                drag_position_absolute.into(),
-            );
+            state.handle_drag(text_manager, is_dragging, drag_position_relative.into());
         } else {
             // TODO: print warning
         }
