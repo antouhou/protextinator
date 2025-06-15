@@ -10,7 +10,7 @@ use cosmic_text::{
 };
 
 #[derive(Default)]
-pub struct TextManager {
+pub struct BufferCache {
     pub buffer_cache: HashMap<Id, Buffer>,
     pub buffers_accessed_last_frame: HashSet<Id>,
 }
@@ -32,7 +32,7 @@ pub struct GlyphPosition {
     pub width: f32,
 }
 
-impl TextManager {
+impl BufferCache {
     pub fn new() -> Self {
         Self {
             buffer_cache: HashMap::new(),
@@ -102,7 +102,7 @@ impl TextManager {
             layout: layout_cursor.layout,
             glyph: 0,
         };
-        let position_of_first_glyph = TextManager::get_position_of_a_glyph_with_buffer_and_cursor(
+        let position_of_first_glyph = BufferCache::get_position_of_a_glyph_with_buffer_and_cursor(
             buffer,
             first_glyph_on_line_cursor,
         );
@@ -122,31 +122,6 @@ impl TextManager {
         Some(byte_offset_cursor)
     }
 
-    pub fn get_position_of_a_glyph(
-        &mut self,
-        buffer_id: &Id,
-        line_index: usize,
-        glyph_index: usize,
-    ) -> Option<GlyphPosition> {
-        let buffer = self.buffer_no_retain(buffer_id)?;
-        Self::get_position_of_a_glyph_with_buffer(buffer, line_index, glyph_index)
-    }
-
-    pub fn get_position_of_a_glyph_with_buffer(
-        buffer: &Buffer,
-        line_index: usize,
-        glyph_index: usize,
-    ) -> Option<GlyphPosition> {
-        let line = buffer.lines.get(line_index)?;
-        let layout = line.layout_opt().as_ref()?.get(line_index)?;
-        let glyph = layout.glyphs.get(glyph_index)?;
-        Some(GlyphPosition {
-            x: glyph.x,
-            y: glyph.y,
-            width: glyph.w,
-        })
-    }
-
     pub fn get_position_of_a_glyph_with_buffer_and_cursor(
         buffer: &Buffer,
         cursor: LayoutCursor,
@@ -160,24 +135,6 @@ impl TextManager {
             y: glyph.y,
             width: glyph.w,
         })
-    }
-
-    pub fn get_position_of_last_glyph(&mut self, buffer_id: &Id) -> Option<GlyphPosition> {
-        let buffer = self.buffer_no_retain(buffer_id)?;
-        Self::get_position_of_last_glyph_buffer(buffer)
-    }
-
-    pub fn get_position_of_last_glyph_buffer(buffer: &Buffer) -> Option<GlyphPosition> {
-        let line = buffer.lines.last()?;
-        let line_index = buffer.lines.len().saturating_sub(1);
-        let glyph_index = line
-            .layout_opt()
-            .as_ref()?
-            .last()?
-            .glyphs
-            .len()
-            .saturating_sub(1);
-        Self::get_position_of_a_glyph_with_buffer(buffer, line_index, glyph_index)
     }
 
     pub fn create_and_shape_text_if_not_in_cache(

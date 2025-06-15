@@ -156,7 +156,7 @@ impl FontFamily {
         Self::Monospace
     }
 
-    pub fn to_fontdb_family<'a>(&'a self) -> Family<'a> {
+    pub fn to_fontdb_family(&self) -> Family {
         match self {
             FontFamily::Name(a) => Family::Name(a),
             FontFamily::SansSerif => Family::SansSerif,

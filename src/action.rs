@@ -21,6 +21,7 @@ pub enum ActionResult {
     CursorUpdated,
     TextChanged,
     InsertToClipboard(String),
+    ActionsDisabled,
 }
 
 impl ActionResult {

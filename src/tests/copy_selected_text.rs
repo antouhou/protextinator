@@ -15,6 +15,8 @@ pub fn test_copy_empty_selection() {
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 
     // No selection, cursor at the beginning
@@ -38,6 +40,8 @@ pub fn test_copy_partial_selection() {
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 
     // Set up a selection by clicking and dragging
@@ -65,6 +69,8 @@ pub fn test_copy_full_selection() {
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 
     // Select all text
@@ -92,6 +98,8 @@ pub fn test_copy_cyrillic_text() {
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 
     // Set up a selection by clicking and dragging
@@ -120,6 +128,7 @@ pub fn test_copy_after_editing() {
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
 
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
 

@@ -1,9 +1,9 @@
 use crate::action::{Action, ActionResult};
 use crate::byte_cursor::ByteCursor;
-use crate::ctx::TextContext;
+use crate::text_manager::TextContext;
 use crate::math::Size;
 use crate::style::TextStyle;
-use crate::text::{buffer_height, calculate_caret_position_pt, vertical_offset};
+use crate::buffer_cache::{buffer_height, calculate_caret_position_pt, vertical_offset};
 use crate::{Id, Point, Rect, TextParams};
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
@@ -25,19 +25,7 @@ pub struct Selection {
     pub lines: Vec<SelectionLine>,
 }
 
-// pub struct CalculatedProperties {
-//     pub relative_caret_offset_horizontal: f32,
-//     pub relative_caret_offset_vertical: f32,
-//     /// The number of characters in the text.
-//     text_size: usize,
-//     /// The horizontal offset of the text inside the buffer. It is needed since horizontal scrolling
-//     ///  in cosmic_text does not seem to work.
-//     pub scroll: Scroll,
-// }
-
 pub struct TextState {
-    pub is_first_run: bool,
-
     pub params: TextParams,
 
     pub cursor: ByteCursor,
@@ -49,9 +37,6 @@ pub struct TextState {
     /// The horizontal offset of the text inside the buffer. It is needed since horizontal scrolling
     ///  in cosmic_text does not seem to work.
     pub scroll: Scroll,
-    /// The number of characters in the text.
-    text_size: usize,
-
     pub selection: Selection,
 
     // Settings
@@ -59,8 +44,10 @@ pub struct TextState {
     pub is_selectable: bool,
     /// Can text be edited?
     pub is_editable: bool,
-    /// If the text is editable, set this to true to allow editing.
+    /// Various actions, such as copy, paste, cut, etc., are going to be performed
     pub is_editing: bool,
+    pub are_actions_enabled: bool,
+
     pub last_scroll_timestamp: Instant,
     pub scroll_interval: Duration,
 }
@@ -68,20 +55,18 @@ pub struct TextState {
 impl TextState {
     pub fn new_with_text(text: impl Into<String>, text_buffer_id: Id) -> Self {
         let text = text.into();
-        let char_count = text.chars().count();
 
         Self {
-            is_first_run: true,
             params: TextParams::new(Size::default(), TextStyle::default(), text, text_buffer_id),
 
             is_editing: false,
+            are_actions_enabled: false,
 
             cursor: ByteCursor::default(),
 
             relative_caret_offset_horizontal: 0.0,
             relative_caret_offset_vertical: 0.0,
             scroll: Scroll::new(0, 0.0, 0.0),
-            text_size: char_count,
             selection: Selection::default(),
             last_scroll_timestamp: Instant::now(),
             scroll_interval: Duration::from_millis(50),
@@ -97,9 +82,8 @@ impl TextState {
 
     pub fn set_text(&mut self, text: &str, ctx: &mut TextContext) {
         self.params.set_text(text);
-        self.text_size = self.params.text().chars().count();
 
-        self.shape_if_not_shaped(ctx, false);
+        self.reshape_if_params_changed(ctx);
 
         if self.cursor.byte_character_start > self.params.text().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
@@ -111,7 +95,7 @@ impl TextState {
     }
 
     pub fn text_size(&self) -> usize {
-        self.text_size
+        self.params.text().chars().count()
     }
 
     pub fn insert_char_at_cursor(
@@ -124,18 +108,15 @@ impl TextState {
         self.reshape_if_params_changed(ctx);
         self.move_cursor(ctx, Motion::Next);
 
-        self.text_size += 1;
         ActionResult::TextChanged
     }
 
-    pub fn insert_text_at_cursor(&mut self, text: &str) -> usize {
+    pub fn insert_text_at_cursor(&mut self, text: &str) {
         self.params
             .insert_str(self.cursor.byte_character_start, text);
-        self.text_size += text.chars().count();
         self.update_cursor_before_glyph_with_bytes_offset(
             self.cursor.byte_character_start + text.len(),
         );
-        self.text_size
     }
 
     pub fn remove_char_at_cursor(&mut self) {
@@ -166,9 +147,7 @@ impl TextState {
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
-        let char = self.params.remove_char(byte_offset);
-        self.text_size = self.params.text().chars().count();
-        char
+        self.params.remove_char(byte_offset)
     }
 
     pub fn remove_selected_text(&mut self) -> Option<()> {
@@ -273,7 +252,7 @@ impl TextState {
 
     pub fn shape_if_not_shaped(&self, ctx: &mut TextContext, reshape: bool) {
         let font_system = &mut ctx.font_system;
-        ctx.text_manager
+        ctx.buffer_cache
             .create_and_shape_text_if_not_in_cache(&self.params, font_system, reshape);
     }
 
@@ -387,7 +366,7 @@ impl TextState {
         self.reshape_if_params_changed(ctx);
 
         let buffer = ctx
-            .text_manager
+            .buffer_cache
             .buffer_no_retain_mut(&text_buffer_id)
             .unwrap();
 
@@ -588,7 +567,7 @@ impl TextState {
     }
 
     pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
-        ctx.text_manager
+        ctx.buffer_cache
             .buffer_no_retain(&self.params.buffer_id())
             .is_none()
     }
@@ -608,9 +587,7 @@ impl TextState {
     }
 
     fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
-        let old_text_size = self.text_size();
-        let new_text_size = self.insert_text_at_cursor(text);
-        if old_text_size != new_text_size {
+        if !text.is_empty() {
             self.reset_selection_end();
         }
 
@@ -668,7 +645,7 @@ impl TextState {
 
     fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
         let Some(buffer) = ctx
-            .text_manager
+            .buffer_cache
             .buffer_no_retain_mut(&self.params.buffer_id())
         else {
             return ActionResult::None;
@@ -704,6 +681,10 @@ impl TextState {
     }
 
     pub fn apply_action(&mut self, ctx: &mut TextContext, action: &Action) -> ActionResult {
+        if !self.are_actions_enabled {
+            return ActionResult::ActionsDisabled;
+        }
+
         if self.is_selectable {
             let res = if self.is_editable {
                 match action {
@@ -741,7 +722,7 @@ impl TextState {
         text_context: &mut TextContext,
         click_position_relative_to_area: Point,
     ) -> Option<()> {
-        let text_manager = &mut text_context.text_manager;
+        let text_manager = &mut text_context.buffer_cache;
         let font_system = &mut text_context.font_system;
         if self.is_selectable || self.is_editable {
             self.reset_selection();
@@ -772,7 +753,7 @@ impl TextState {
         if !is_dragging {
             return None;
         }
-        let text_manager = &mut ctx.text_manager;
+        let text_manager = &mut ctx.buffer_cache;
         let font_system = &mut ctx.font_system;
         if self.is_selectable {
             let byte_cursor_under_position =
