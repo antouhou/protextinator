@@ -142,7 +142,7 @@ impl<'a> App<'a> {
 
             // Use protextinator to shape and cache the text
             self.text_manager
-                .create_and_shape_text_if_not_in_cache(&params, font_system, false);
+                .shape_buffer_if_needed(&params, font_system, false, None);
 
             // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
             if let Some(buffer) = self.text_manager.buffer_no_retain(&text_id) {
@@ -215,10 +215,11 @@ impl<'a> App<'a> {
                 );
 
                 // Create another buffer using protextinator for the stats
-                self.text_manager.create_and_shape_text_if_not_in_cache(
+                self.text_manager.shape_buffer_if_needed(
                     &text_params,
                     font_system,
                     true, // Always reshape stats as they change
+                    None,
                 );
 
                 // Render stats using add_text_buffer as well

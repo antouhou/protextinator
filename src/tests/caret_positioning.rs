@@ -16,11 +16,8 @@ pub fn test() {
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
-    let mono_width = ctx
-        .buffer_cache
-        .get_position_of_last_glyph(&text_id)
-        .unwrap()
-        .width;
+    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+
     assert!(mono_width > 0.0);
 
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
@@ -68,11 +65,8 @@ pub fn test_cyrillic() {
     text_state.are_actions_enabled = true;
 
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
-    let mono_width = ctx
-        .buffer_cache
-        .get_position_of_last_glyph(&text_id)
-        .unwrap()
-        .width;
+    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+
     assert!(mono_width > 0.0);
 
     assert_eq!(text_state.text_size(), 10);
@@ -161,11 +155,8 @@ pub fn test_insert_into_empty_text() {
 
     // Verify caret offset - this should fail due to the bug
     // The caret should have moved to the right
-    let mono_width = ctx
-        .buffer_cache
-        .get_position_of_last_glyph(&text_id)
-        .unwrap()
-        .width;
+    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
         (mono_width * 1.0).floor()
