@@ -5,12 +5,12 @@ use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, TextParams, VerticalTextAlignment};
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt};
-use cosmic_text::{
-    Attrs, Buffer, Cursor, Edit, Editor, FontSystem, LayoutCursor, Metrics, Shaping,
-};
+#[cfg(test)]
+use cosmic_text::LayoutGlyph;
+use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
 
 #[derive(Default)]
-pub struct TextManager {
+pub struct BufferCache {
     pub buffer_cache: HashMap<Id, Buffer>,
     pub buffers_accessed_last_frame: HashSet<Id>,
 }
@@ -32,7 +32,7 @@ pub struct GlyphPosition {
     pub width: f32,
 }
 
-impl TextManager {
+impl BufferCache {
     pub fn new() -> Self {
         Self {
             buffer_cache: HashMap::new(),
@@ -79,125 +79,65 @@ impl TextManager {
         self.buffer_cache.remove(&id);
     }
 
+    #[cfg(test)]
+    pub fn first_glyph(&mut self, id: &Id) -> Option<&LayoutGlyph> {
+        self.buffer(id).and_then(|buffer| {
+            buffer
+                .layout_runs()
+                .next()
+                .and_then(|run| run.glyphs.first())
+        })
+    }
+
     pub fn char_under_position(
         &mut self,
         state: &TextState,
-        font_system: &mut FontSystem,
         interaction_position_relative_to_element: Point,
     ) -> Option<Cursor> {
         let buffer = self.buffer_no_retain_mut(&state.params.buffer_id())?;
         let horizontal_scroll = buffer.scroll().horizontal;
-        let byte_offset_cursor = buffer.hit(
+        buffer.hit(
             interaction_position_relative_to_element.x + horizontal_scroll,
             interaction_position_relative_to_element.y,
-        )?;
-
-        // TODO: cursor doesn't seem to correctly detect hit to the left of the line,
-        //  so there's a little hack to detect if it is to the left of the line's first glyph
-        // ======== Check that click isn't to the left of the line's first glyph =========
-        let layout_cursor = buffer.layout_cursor(font_system, byte_offset_cursor)?;
-
-        let first_glyph_on_line_cursor = LayoutCursor {
-            line: layout_cursor.line,
-            layout: layout_cursor.layout,
-            glyph: 0,
-        };
-        let position_of_first_glyph = TextManager::get_position_of_a_glyph_with_buffer_and_cursor(
-            buffer,
-            first_glyph_on_line_cursor,
-        );
-
-        if let Some(position) = position_of_first_glyph {
-            if interaction_position_relative_to_element.x < position.x {
-                let first_glyph_cursor = Cursor {
-                    line: byte_offset_cursor.line,
-                    index: byte_offset_cursor.index.saturating_sub(layout_cursor.glyph),
-                    affinity: Default::default(),
-                };
-                return Some(first_glyph_cursor);
-            }
-        }
-        // ================================================================================
-
-        Some(byte_offset_cursor)
+        )
     }
 
-    pub fn get_position_of_a_glyph(
-        &mut self,
-        buffer_id: &Id,
-        line_index: usize,
-        glyph_index: usize,
-    ) -> Option<GlyphPosition> {
-        let buffer = self.buffer_no_retain(buffer_id)?;
-        Self::get_position_of_a_glyph_with_buffer(buffer, line_index, glyph_index)
-    }
-
-    pub fn get_position_of_a_glyph_with_buffer(
-        buffer: &Buffer,
-        line_index: usize,
-        glyph_index: usize,
-    ) -> Option<GlyphPosition> {
-        let line = buffer.lines.get(line_index)?;
-        let layout = line.layout_opt().as_ref()?.get(line_index)?;
-        let glyph = layout.glyphs.get(glyph_index)?;
-        Some(GlyphPosition {
-            x: glyph.x,
-            y: glyph.y,
-            width: glyph.w,
-        })
-    }
-
-    pub fn get_position_of_a_glyph_with_buffer_and_cursor(
-        buffer: &Buffer,
-        cursor: LayoutCursor,
-    ) -> Option<GlyphPosition> {
-        let line = buffer.lines.get(cursor.line)?;
-        let layout = line.layout_opt().as_ref()?.get(cursor.layout)?;
-        let glyph = layout.glyphs.get(cursor.glyph)?;
-
-        Some(GlyphPosition {
-            x: glyph.x,
-            y: glyph.y,
-            width: glyph.w,
-        })
-    }
-
-    pub fn get_position_of_last_glyph(&mut self, buffer_id: &Id) -> Option<GlyphPosition> {
-        let buffer = self.buffer_no_retain(buffer_id)?;
-        Self::get_position_of_last_glyph_buffer(buffer)
-    }
-
-    pub fn get_position_of_last_glyph_buffer(buffer: &Buffer) -> Option<GlyphPosition> {
-        let line = buffer.lines.last()?;
-        let line_index = buffer.lines.len().saturating_sub(1);
-        let glyph_index = line
-            .layout_opt()
-            .as_ref()?
-            .last()?
-            .glyphs
-            .len()
-            .saturating_sub(1);
-        Self::get_position_of_a_glyph_with_buffer(buffer, line_index, glyph_index)
-    }
-
-    pub fn create_and_shape_text_if_not_in_cache(
+    pub fn shape_buffer_if_needed(
         &mut self,
         params: &TextParams,
         font_system: &mut FontSystem,
         reshape: bool,
+        shape_till_cursor: Option<Cursor>,
     ) {
         let buffer_not_in_cache = self.buffer_no_retain(&params.buffer_id()).is_none();
         if buffer_not_in_cache || reshape {
-            self.create_and_shape_text_buffer(params, font_system, None);
+            self.create_or_update_and_shape_text_buffer(params, font_system, shape_till_cursor);
         }
     }
 
-    pub fn create_and_shape_text_buffer(
+    fn create_buffer(
         &mut self,
         params: &TextParams,
         font_system: &mut FontSystem,
         cursor: Option<cosmic_text::Cursor>,
     ) {
+        let mut buffer = Buffer::new(font_system, params.metrics());
+
+        BufferCache::update_buffer(params, &mut buffer, font_system, cursor);
+
+        self.insert_buffer(params.buffer_id(), buffer);
+    }
+
+    fn update_buffer(
+        params: &TextParams,
+        buffer: &mut Buffer,
+        font_system: &mut FontSystem,
+        cursor: Option<Cursor>,
+    ) {
+        let old_scroll = buffer.scroll();
+
+        buffer.set_metrics(font_system, params.metrics());
+
         let text_style = &params.style();
         let font_color = text_style.font_color;
 
@@ -205,13 +145,13 @@ impl TextManager {
 
         let text_area_size = params.size();
 
-        let metrics = Metrics::new(text_style.font_size.0, text_style.line_height_pt());
-        let mut buffer = Buffer::new(font_system, metrics);
         buffer.set_wrap(font_system, text_style.wrap.unwrap_or_default().into());
 
         let font_family = &text_style.font_family;
 
+        // TODO: do we actually need to preserve scroll here?
         buffer.set_size(font_system, Some(text_area_size.x), Some(text_area_size.y));
+        buffer.set_scroll(old_scroll);
 
         buffer.set_text(
             font_system,
@@ -232,8 +172,19 @@ impl TextManager {
         } else {
             buffer.shape_until_scroll(font_system, false);
         }
+    }
 
-        self.insert_buffer(params.buffer_id(), buffer);
+    pub fn create_or_update_and_shape_text_buffer(
+        &mut self,
+        params: &TextParams,
+        font_system: &mut FontSystem,
+        cursor: Option<cosmic_text::Cursor>,
+    ) {
+        if let Some(buffer) = self.buffer_mut(&params.buffer_id()) {
+            BufferCache::update_buffer(params, buffer, font_system, cursor);
+        } else {
+            self.create_buffer(params, font_system, cursor);
+        }
     }
 }
 
@@ -269,12 +220,18 @@ pub(crate) fn vertical_offset(
     }
 }
 
-pub(crate) fn calculate_caret_position_pt(
+pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
     buffer: &mut Buffer,
     current_char_byte_cursor: ByteCursor,
+    font_system: &mut FontSystem,
 ) -> Option<Point> {
     let mut edit = Editor::new(&mut *buffer);
     edit.set_cursor(current_char_byte_cursor.cursor);
+
+    // TODO: do this only if something changed
+    edit.shape_as_needed(font_system, false);
+
+    
 
     edit.cursor_position().map(|(x, y)| Point {
         x: x as f32,

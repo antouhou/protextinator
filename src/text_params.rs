@@ -1,6 +1,7 @@
 use crate::math::Size;
 use crate::state::SIZE_EPSILON;
 use crate::{Id, TextStyle};
+use cosmic_text::Metrics;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextParams {
@@ -130,5 +131,9 @@ impl TextParams {
             self.buffer_id = *buffer_id;
             self.changed = true;
         }
+    }
+
+    pub fn metrics(&self) -> Metrics {
+        Metrics::new(self.style().font_size.0, self.style().line_height_pt())
     }
 }

@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::{
-    cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager,
+    cosmic_text::FontSystem, BufferCache, FontFamily, FontSize, Id, LineHeight, Point, Rect,
     TextStyle, TextWrap, VerticalTextAlignment,
 };
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use winit::{
 struct App<'a> {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer<'a>>,
-    text_manager: TextManager,
+    text_manager: BufferCache,
     font_system: Option<FontSystem>,
     text_content: String,
     cursor_position: usize,
@@ -34,7 +34,7 @@ impl<'a> App<'a> {
         Self {
             window: None,
             renderer: None,
-            text_manager: TextManager::new(),
+            text_manager: BufferCache::new(),
             font_system: None,
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
@@ -142,7 +142,7 @@ impl<'a> App<'a> {
 
             // Use protextinator to shape and cache the text
             self.text_manager
-                .create_and_shape_text_if_not_in_cache(&params, font_system, false);
+                .shape_buffer_if_needed(&params, font_system, false, None);
 
             // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
             if let Some(buffer) = self.text_manager.buffer_no_retain(&text_id) {
@@ -215,10 +215,11 @@ impl<'a> App<'a> {
                 );
 
                 // Create another buffer using protextinator for the stats
-                self.text_manager.create_and_shape_text_if_not_in_cache(
+                self.text_manager.shape_buffer_if_needed(
                     &text_params,
                     font_system,
                     true, // Always reshape stats as they change
+                    None,
                 );
 
                 // Render stats using add_text_buffer as well

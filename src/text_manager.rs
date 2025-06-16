@@ -1,11 +1,11 @@
 use crate::state::TextState;
-use crate::{Id, Point, TextManager};
+use crate::{BufferCache, Id};
 use ahash::HashMap;
 use cosmic_text::{fontdb, FontSystem, SwashCache};
 use std::sync::Arc;
 
 pub struct TextContext {
-    pub text_manager: TextManager,
+    pub buffer_cache: BufferCache,
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
 }
@@ -13,7 +13,7 @@ pub struct TextContext {
 impl Default for TextContext {
     fn default() -> Self {
         Self {
-            text_manager: TextManager::default(),
+            buffer_cache: BufferCache::default(),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
         }
@@ -21,36 +21,25 @@ impl Default for TextContext {
 }
 
 #[derive(Default)]
-pub struct Kek {
+pub struct TextManager {
     pub text_states: HashMap<Id, TextState>,
     pub text_context: TextContext,
 }
 
-impl Kek {
-    pub fn handle_press(&mut self, text_id: Id, click_position_relative: impl Into<Point>) {
-        if let Some(state) = self.text_states.get_mut(&text_id) {
-            let text_manager = &mut self.text_context;
-            state.handle_press(text_manager, click_position_relative.into());
-            state.is_editing = true;
-        } else {
-            //TODO: print warning
+impl TextManager {
+    pub fn new() -> Self {
+        Self {
+            text_states: HashMap::default(),
+            text_context: TextContext::default(),
         }
     }
 
-    pub fn handle_drag(
-        &mut self,
-        text_id: Id,
-        drag_position_relative: impl Into<Point>,
-        is_dragging: bool,
-    ) -> Option<()> {
-        if let Some(state) = self.text_states.get_mut(&text_id) {
-            let text_manager = &mut self.text_context;
-            state.handle_drag(text_manager, is_dragging, drag_position_relative.into());
-        } else {
-            // TODO: print warning
-        }
+    pub fn load_fonts(&mut self, fonts: impl Iterator<Item = fontdb::Source>) {
+        self.text_context.load_fonts(fonts);
+    }
 
-        None
+    pub fn load_fonts_from_bytes<'a>(&mut self, fonts: impl Iterator<Item = &'a [u8]>) {
+        self.text_context.load_fonts_from_bytes(fonts);
     }
 }
 
