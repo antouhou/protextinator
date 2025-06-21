@@ -164,13 +164,13 @@ impl BufferCache {
         for line in buffer.lines.iter_mut() {
             line.set_align(horizontal_alignment.into());
         }
-        
+
         if let Some(cursor) = cursor {
             buffer.shape_until_cursor(font_system, cursor, false);
         } else {
             buffer.shape_until_scroll(font_system, false);
         }
-        
+
         // Restore the scroll position, so adding text does not change the scroll position.
         buffer.set_scroll(old_scroll);
     }
@@ -227,7 +227,6 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
     font_system: &mut FontSystem,
     text_area_size: Size,
     style: &TextStyle,
-    text: &str,
 ) -> Option<Point> {
     let mut editor = Editor::new(&mut *buffer);
     editor.set_cursor(current_char_byte_cursor.cursor);
@@ -236,12 +235,16 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
 
     match caret_position {
         Some(position) => {
-            let point = Point::from(position);
-
+            let mut point = Point::from(position);
             let mut scroll = buffer.scroll();
-            let current_caret_y = point.y + scroll.vertical;
-            // TODO: check that the caret is fully visible
-            // println!("Current caret: {}", current_caret_y);
+
+            // If the caret is not fully visible, we need to scroll it into view
+            // TODO: maybe to that if the end of caret is larger than the text area size as well?
+            if point.y < 0.0 {
+                scroll.vertical += point.y;
+                point.y = 0.0;
+                buffer.set_scroll(scroll);
+            }
 
             Some(point)
         }
@@ -249,22 +252,22 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
             // Caret is not visible, we need to shape the text and move the scroll
             // TODO: do this only if we're sure we need to shape the text
             editor.shape_as_needed(font_system, false);
-            // Inserting a new line at the end of the visible area
-            let cursor_is_at_the_string_end = current_char_byte_cursor.is_at_string_end(text);
-            println!("Cursor is at end: {}", cursor_is_at_the_string_end);
-            // In case if the cursor is at the end of the string, but we don't need to scroll just 
-            // yet, we still need to do vertical alignment to avoid the text jumping when the text
-            // is changed
-            // if style.vertical_alignment == VerticalTextAlignment::End && cursor_is_at_the_string_end {
-            //     editor.with_buffer_mut(|buffer| {
-            //         let mut scroll = buffer.scroll();
-            //         let vertical_scroll_to_align_text =
-            //             calculate_vertical_offset(style, text_area_size, buffer);
-            //         scroll.vertical = vertical_scroll_to_align_text;
-            //         buffer.set_scroll(scroll);
-            //     });
-            // }
+
+            // If it's not visible, and the scroll is already at the top, that means that we're
+            //  at the end of the text, and we need to scroll to the bottom to avoid jumping to
+            //  the top of the text.
+            if style.vertical_alignment == VerticalTextAlignment::End {
+                editor.with_buffer_mut(|buffer| {
+                    let mut scroll = buffer.scroll();
+                    if scroll.vertical == 0.0 {
+                        let vertical_scroll_to_align_text =
+                            calculate_vertical_offset(style, text_area_size, buffer);
+                        scroll.vertical = vertical_scroll_to_align_text;
+                        buffer.set_scroll(scroll);
+                    }
+                });
+            }
             editor.cursor_position().map(Point::from)
-        },
+        }
     }
 }

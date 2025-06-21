@@ -34,11 +34,11 @@ impl ByteCursor {
             }
         }
     }
-    
+
     pub fn is_at_string_start(&self) -> bool {
         self.byte_character_start == 0 && self.cursor.line == 0 && self.cursor.index == 0
     }
-    
+
     pub fn is_at_string_end(&self, string: &str) -> bool {
         self.byte_character_start == string.len()
     }

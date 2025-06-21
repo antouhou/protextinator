@@ -314,7 +314,7 @@ impl TextState {
     pub fn recalculate(&mut self, ctx: &mut TextContext, update_reason: UpdateReason) {
         let text_buffer_id = self.params.buffer_id();
 
-        let reshaped = self.params.changed_since_last_shape();
+        let _reshaped = self.params.changed_since_last_shape();
         // TODO: pass cursor if it's not currently visible
         self.reshape_if_params_changed(ctx, None);
 
@@ -345,7 +345,7 @@ impl TextState {
     ) -> Option<()> {
         let old_scroll = self.scroll;
         let mut new_scroll = old_scroll;
-        
+
         if self.is_editing {
             let caret_position_relative_to_buffer =
                 calculate_caret_position_pt_and_update_vertical_scroll(
@@ -354,7 +354,6 @@ impl TextState {
                     font_system,
                     self.params.size(),
                     self.params.style(),
-                    self.params.text()
                 )?;
             new_scroll = buffer.scroll();
 
@@ -439,7 +438,7 @@ impl TextState {
                 calculate_vertical_offset(self.params.style(), text_area_size, buffer);
             new_scroll.vertical = vertical_scroll_to_align_text;
         }
-        
+
         buffer.set_scroll(new_scroll);
         self.scroll = new_scroll;
 
@@ -693,7 +692,7 @@ impl TextState {
             let byte_cursor_under_position =
                 text_manager.char_under_position(self, pointer_relative_position)?;
 
-            if let Some(origin) = self.selection.origin_character_byte_cursor {
+            if let Some(_origin) = self.selection.origin_character_byte_cursor {
                 self.selection.ends_before_character_byte_cursor =
                     ByteCursor::from_cursor(byte_cursor_under_position, self.params.text());
             }
@@ -720,7 +719,11 @@ impl TextState {
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
 ///  needed to align the text vertically.
-pub(crate) fn calculate_vertical_offset(text_style: &TextStyle, text_area_size: Size, buffer: &Buffer) -> f32 {
+pub(crate) fn calculate_vertical_offset(
+    text_style: &TextStyle,
+    text_area_size: Size,
+    buffer: &Buffer,
+) -> f32 {
     let text_area_rect = Rect::new((0.0, 0.0).into(), text_area_size);
     let style = text_style;
 

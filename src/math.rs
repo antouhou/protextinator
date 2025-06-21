@@ -69,6 +69,9 @@ impl From<(f32, f32)> for Point {
 
 impl From<(i32, i32)> for Point {
     fn from((x, y): (i32, i32)) -> Self {
-        Self { x: x as f32, y: y as f32 }
+        Self {
+            x: x as f32,
+            y: y as f32,
+        }
     }
 }
