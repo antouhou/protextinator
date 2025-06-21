@@ -345,16 +345,16 @@ impl TextState {
     ) -> Option<()> {
         let old_scroll = self.scroll;
         let mut new_scroll = old_scroll;
-        // TODO: fix vertical alignment
-        // let vertical_scroll_to_align_text =
-        //     calculate_vertical_offset(self.params.style(), text_area_size, buffer);
-
+        
         if self.is_editing {
             let caret_position_relative_to_buffer =
                 calculate_caret_position_pt_and_update_vertical_scroll(
                     buffer,
                     self.cursor,
                     font_system,
+                    self.params.size(),
+                    self.params.style(),
+                    self.params.text()
                 )?;
             new_scroll = buffer.scroll();
 
@@ -398,7 +398,6 @@ impl TextState {
             // If caret is within the visible text area, we don't need to scroll.
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
-                // Check if we should implement improved scroll behavior for overflowing text
                 let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
                     buffer,
                     text_area_width,
@@ -410,15 +409,10 @@ impl TextState {
                 let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
 
                 if should_update_horizontal_scroll && !is_moving_caret {
-                    // Improved behavior: keep caret visually fixed, adjust scroll accordingly
-                    // We want: new_absolute_caret_offset = new_scroll.horizontal + new_relative_caret_offset
-                    // Since we want to keep new_relative_caret_offset = current_relative_caret_offset
-                    // We get: new_scroll.horizontal = new_absolute_caret_offset - current_relative_caret_offset
                     new_scroll.horizontal =
                         new_absolute_caret_offset - current_relative_caret_offset;
                     new_relative_caret_offset = current_relative_caret_offset; // Keep caret visually fixed
                 } else {
-                    // Standard behavior: Do not do anything with the scroll, convert caret to relative
                     new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
                     new_scroll.horizontal = old_scroll.horizontal;
                 }
@@ -439,9 +433,13 @@ impl TextState {
 
             self.relative_caret_offset_horizontal = new_relative_caret_offset;
             self.relative_caret_offset_vertical = caret_position_relative_to_buffer.y;
+        } else {
+            // TODO: run the calculation only if something changed
+            let vertical_scroll_to_align_text =
+                calculate_vertical_offset(self.params.style(), text_area_size, buffer);
+            new_scroll.vertical = vertical_scroll_to_align_text;
         }
-
-        // new_scroll.vertical = vertical_scroll_to_align_text;
+        
         buffer.set_scroll(new_scroll);
         self.scroll = new_scroll;
 
@@ -722,15 +720,15 @@ impl TextState {
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
 ///  needed to align the text vertically.
-fn calculate_vertical_offset(text_style: &TextStyle, text_area_size: Size, buffer: &Buffer) -> f32 {
-    let normalized_area = Rect::new((0.0, 0.0).into(), text_area_size);
+pub(crate) fn calculate_vertical_offset(text_style: &TextStyle, text_area_size: Size, buffer: &Buffer) -> f32 {
+    let text_area_rect = Rect::new((0.0, 0.0).into(), text_area_size);
     let style = text_style;
 
     let vertical_alignment = style.vertical_alignment;
     // TODO: fix scaling
     let buffer_height = buffer_height(buffer, style, 2.0);
     // TODO: FIX TOP.
-    let vertical_offset = vertical_offset(vertical_alignment, normalized_area, buffer_height);
+    let vertical_offset = vertical_offset(vertical_alignment, text_area_rect, buffer_height);
 
     0.0 - vertical_offset
 }

@@ -1,6 +1,6 @@
 use crate::byte_cursor::ByteCursor;
-use crate::math::{Point, Rect};
-use crate::state::TextState;
+use crate::math::{Point, Rect, Size};
+use crate::state::{calculate_vertical_offset, TextState};
 use crate::style::TextStyle;
 use crate::style::TextWrap;
 use crate::{Id, TextParams, VerticalTextAlignment};
@@ -149,9 +149,7 @@ impl BufferCache {
 
         let font_family = &text_style.font_family;
 
-        // TODO: do we actually need to preserve scroll here?
         buffer.set_size(font_system, Some(text_area_size.x), Some(text_area_size.y));
-        buffer.set_scroll(old_scroll);
 
         buffer.set_text(
             font_system,
@@ -166,12 +164,15 @@ impl BufferCache {
         for line in buffer.lines.iter_mut() {
             line.set_align(horizontal_alignment.into());
         }
-
+        
         if let Some(cursor) = cursor {
             buffer.shape_until_cursor(font_system, cursor, false);
         } else {
             buffer.shape_until_scroll(font_system, false);
         }
+        
+        // Restore the scroll position, so adding text does not change the scroll position.
+        buffer.set_scroll(old_scroll);
     }
 
     pub fn create_or_update_and_shape_text_buffer(
@@ -224,17 +225,46 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
     buffer: &mut Buffer,
     current_char_byte_cursor: ByteCursor,
     font_system: &mut FontSystem,
+    text_area_size: Size,
+    style: &TextStyle,
+    text: &str,
 ) -> Option<Point> {
-    let mut edit = Editor::new(&mut *buffer);
-    edit.set_cursor(current_char_byte_cursor.cursor);
+    let mut editor = Editor::new(&mut *buffer);
+    editor.set_cursor(current_char_byte_cursor.cursor);
 
-    // TODO: do this only if something changed
-    edit.shape_as_needed(font_system, false);
+    let caret_position = editor.cursor_position();
 
-    
+    match caret_position {
+        Some(position) => {
+            let point = Point::from(position);
 
-    edit.cursor_position().map(|(x, y)| Point {
-        x: x as f32,
-        y: y as f32,
-    })
+            let mut scroll = buffer.scroll();
+            let current_caret_y = point.y + scroll.vertical;
+            // TODO: check that the caret is fully visible
+            // println!("Current caret: {}", current_caret_y);
+
+            Some(point)
+        }
+        None => {
+            // Caret is not visible, we need to shape the text and move the scroll
+            // TODO: do this only if we're sure we need to shape the text
+            editor.shape_as_needed(font_system, false);
+            // Inserting a new line at the end of the visible area
+            let cursor_is_at_the_string_end = current_char_byte_cursor.is_at_string_end(text);
+            println!("Cursor is at end: {}", cursor_is_at_the_string_end);
+            // In case if the cursor is at the end of the string, but we don't need to scroll just 
+            // yet, we still need to do vertical alignment to avoid the text jumping when the text
+            // is changed
+            // if style.vertical_alignment == VerticalTextAlignment::End && cursor_is_at_the_string_end {
+            //     editor.with_buffer_mut(|buffer| {
+            //         let mut scroll = buffer.scroll();
+            //         let vertical_scroll_to_align_text =
+            //             calculate_vertical_offset(style, text_area_size, buffer);
+            //         scroll.vertical = vertical_scroll_to_align_text;
+            //         buffer.set_scroll(scroll);
+            //     });
+            // }
+            editor.cursor_position().map(Point::from)
+        },
+    }
 }
