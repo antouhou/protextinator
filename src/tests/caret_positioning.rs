@@ -199,3 +199,40 @@ pub fn test_delete_at_end_of_text() {
     assert_eq!(text_state.text(), "Hell");
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(4));
 }
+
+#[test]
+pub fn test_insert_newline_at_end_of_text() {
+    // Test for the bug: If the caret is at the very end of the string and trying to delete a character,
+    // the code panics
+    let mut ctx = TextContext::default();
+    let text_id = Id::new(0);
+    let initial_text = "Hello".to_string();
+
+    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    text_state.params.set_style(&mono_style_test());
+    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.is_editable = true;
+    text_state.is_editing = true;
+    text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+
+    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+
+    // Move cursor to the end of the text
+    for _ in 0..5 {
+        text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
+    }
+
+    // Verify cursor is at the end of the text
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(5));
+
+    // Try to delete a character at the end of the text
+    // This should panic due to the bug
+    let result = text_state.apply_action(&mut ctx, &Action::InsertChar("\n".into()));
+
+    // The following assertions should not be reached if the code panics
+    assert!(matches!(result, ActionResult::TextChanged));
+    assert_eq!(text_state.text_size(), 6);
+    assert_eq!(text_state.text(), "Hello\n");
+    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(6));
+}

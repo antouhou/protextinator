@@ -105,6 +105,12 @@ impl TextParams {
     pub fn set_text(&mut self, text: &str) {
         if self.text != text {
             self.text = text.into();
+            if !self.text.ends_with('\n') {
+                // Ensure the text always ends with a line terminator. If the text does not end with
+                // a newline, you'll need to add two newline characters to insert a new line at the
+                // end of the text.
+                self.text.push('\n');
+            }
             self.changed = true;
         }
     }
