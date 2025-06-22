@@ -99,7 +99,7 @@ impl TextState {
 
         self.reshape_if_params_changed(ctx, None);
 
-        if self.cursor.byte_character_start > self.params.text().len() {
+        if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
@@ -134,12 +134,15 @@ impl TextState {
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.params.text().is_empty() {
-            if let Some(prev_char) = self.cursor.prev_char_byte_offset(self.params.text()) {
+        if !self.params.text_for_internal_use().is_empty() {
+            if let Some(prev_char) = self
+                .cursor
+                .prev_char_byte_offset(self.params.text_for_internal_use())
+            {
                 self.remove_character(prev_char);
                 if !self
                     .cursor
-                    .update_byte_offset(prev_char, self.params.text())
+                    .update_byte_offset(prev_char, self.params.text_for_internal_use())
                 {
                     // TODO: print a warning
                 }
@@ -156,12 +159,13 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor.update_cursor(cursor, self.params.text());
+        self.cursor
+            .update_cursor(cursor, self.params.text_for_internal_use());
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
         self.cursor
-            .update_byte_offset(byte_offset, self.params.text());
+            .update_byte_offset(byte_offset, self.params.text_for_internal_use());
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
@@ -715,8 +719,10 @@ impl TextState {
                 text_manager.char_under_position(self, pointer_relative_position)?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
-                self.selection.ends_before_character_byte_cursor =
-                    ByteCursor::from_cursor(byte_cursor_under_position, self.params.text());
+                self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
+                    byte_cursor_under_position,
+                    self.params.text_for_internal_use(),
+                );
             }
 
             // Simple debounce to make scroll speed consistent

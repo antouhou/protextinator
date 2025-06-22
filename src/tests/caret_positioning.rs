@@ -188,6 +188,7 @@ pub fn test_delete_at_end_of_text() {
 
     // Verify cursor is at the end of the text
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(5));
+    assert_eq!(text_state.text_size(), 5);
 
     // Try to delete a character at the end of the text
     // This should panic due to the bug
@@ -225,6 +226,7 @@ pub fn test_insert_newline_at_end_of_text() {
 
     // Verify cursor is at the end of the text
     assert_eq!(text_state.cursor.char_index(text_state.text()), Some(5));
+    assert_eq!(text_state.text_size(), 5);
 
     // Try to delete a character at the end of the text
     // This should panic due to the bug

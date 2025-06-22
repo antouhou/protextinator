@@ -11,6 +11,7 @@ pub struct TextParams {
     buffer_id: Id,
 
     changed: bool,
+    line_terminator_has_been_added: bool,
 }
 
 impl TextParams {
@@ -23,6 +24,7 @@ impl TextParams {
             buffer_id,
 
             changed: true,
+            line_terminator_has_been_added: false,
         };
 
         params.set_text(&text);
@@ -51,6 +53,18 @@ impl TextParams {
 
     #[inline(always)]
     pub fn text(&self) -> &str {
+        if self.line_terminator_has_been_added {
+            // If the line terminator was added by the set_text method, remove it to restore the
+            // original text.
+            &self.text[..self.text.len().saturating_sub(1)]
+        } else {
+            // Otherwise, return the text as is.
+            &self.text
+        }
+    }
+
+    #[inline(always)]
+    pub fn text_for_internal_use(&self) -> &str {
         &self.text
     }
 
@@ -113,6 +127,9 @@ impl TextParams {
                 // a newline, you'll need to add two newline characters to insert a new line at the
                 // end of the text.
                 self.text.push('\n');
+                self.line_terminator_has_been_added = true;
+            } else {
+                self.line_terminator_has_been_added = false;
             }
             self.changed = true;
         }

@@ -165,7 +165,7 @@ impl BufferCache {
 
         buffer.set_text(
             font_system,
-            params.text(),
+            params.text_for_internal_use(),
             &Attrs::new()
                 .color(font_color.into())
                 .family(font_family.to_fontdb_family())
