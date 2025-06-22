@@ -1,15 +1,18 @@
 use crate::action::{Action, ActionResult};
+use crate::buffer_utils::{
+    calculate_caret_position_pt_and_update_vertical_scroll, char_under_position, update_buffer,
+    vertical_offset,
+};
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
 use crate::style::TextStyle;
 use crate::text_manager::TextContext;
 use crate::{Id, Point, Rect, TextParams};
+#[cfg(test)]
+use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
-use crate::buffer_utils::{calculate_caret_position_pt_and_update_vertical_scroll, char_under_position, update_buffer, vertical_offset};
-#[cfg(test)]
-use cosmic_text::LayoutGlyph;
 
 pub const SIZE_EPSILON: f32 = 0.0001;
 
@@ -66,14 +69,13 @@ pub struct TextState {
 }
 
 impl TextState {
-    pub fn new_with_text(text: impl Into<String>, text_buffer_id: Id, font_system: &mut FontSystem) -> Self {
+    pub fn new_with_text(
+        text: impl Into<String>,
+        text_buffer_id: Id,
+        font_system: &mut FontSystem,
+    ) -> Self {
         let text = text.into();
-        let params = TextParams::new(
-            Size::ZERO,
-            TextStyle::default(),
-            text,
-            text_buffer_id
-        );
+        let params = TextParams::new(Size::ZERO, TextStyle::default(), text, text_buffer_id);
         let metrics = params.metrics();
 
         Self {
@@ -255,8 +257,9 @@ impl TextState {
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
         if !self.params.original_text().is_empty() {
-            self.selection.ends_before_character_byte_cursor =
-                Some(ByteCursor::after_last_character(self.params.original_text()))
+            self.selection.ends_before_character_byte_cursor = Some(
+                ByteCursor::after_last_character(self.params.original_text()),
+            )
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }

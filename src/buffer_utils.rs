@@ -1,6 +1,6 @@
 use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect, Size};
-use crate::state::{calculate_vertical_offset};
+use crate::state::calculate_vertical_offset;
 use crate::style::TextStyle;
 use crate::{TextParams, TextWrap, VerticalTextAlignment};
 use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
@@ -157,4 +157,3 @@ pub(crate) fn update_buffer(
     buffer.set_scroll(old_scroll);
     buffer_measurement
 }
-

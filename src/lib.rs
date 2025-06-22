@@ -1,4 +1,5 @@
 mod action;
+mod buffer_utils;
 mod byte_cursor;
 mod id;
 pub mod math;
@@ -8,7 +9,6 @@ mod style;
 mod tests;
 mod text_manager;
 mod text_params;
-mod buffer_utils;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;

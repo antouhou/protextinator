@@ -52,13 +52,14 @@ impl TextManager {
     pub fn start_frame(&mut self) {
         self.text_context.usage_tracker.clear();
     }
-    
+
     /// Utility to do some simple garbage collection of text states if you don't want
     /// to implement a usage tracker yourself. Call this at the end of each frame, and this will
     /// remove any text states not marked as accessed since the last call to `start_frame`.
     pub fn end_frame(&mut self) {
         let accessed_states = self.text_context.usage_tracker.accessed_states();
-        self.text_states.retain(|id, _| accessed_states.contains(id));
+        self.text_states
+            .retain(|id, _| accessed_states.contains(id));
     }
 }
 
@@ -83,6 +84,12 @@ impl TextContext {
 
 pub struct TextUsageTracker {
     accessed_states: HashSet<Id>,
+}
+
+impl Default for TextUsageTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TextUsageTracker {
