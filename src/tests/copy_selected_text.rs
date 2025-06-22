@@ -8,7 +8,7 @@ pub fn test_copy_empty_selection() {
     let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
 
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
@@ -34,7 +34,7 @@ pub fn test_copy_partial_selection() {
     let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -63,7 +63,7 @@ pub fn test_copy_full_selection() {
     let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -92,7 +92,7 @@ pub fn test_copy_cyrillic_text() {
     let text_id = Id::new(0);
     let initial_text = "Привет Мир".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -121,7 +121,7 @@ pub fn test_copy_after_editing() {
     let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
 
@@ -155,7 +155,7 @@ pub fn test_copy_selection_from_middle() {
     let text_id = Id::new(0);
     let initial_text = "The quick brown fox jumps over the lazy dog".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((400.0, 25.0)));
     text_state.is_editable = true;
@@ -167,7 +167,7 @@ pub fn test_copy_selection_from_middle() {
 
     // Position cursor before the middle of the line (at 'b' in "brown")
     // First, get the mono width to calculate the position
-    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+    let mono_width = text_state.first_glyph().unwrap().w;
     let position_x = mono_width * 10.0; // Position at "b" in "brown"
 
     // Set up a selection by clicking at the position

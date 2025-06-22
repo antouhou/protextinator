@@ -1,5 +1,4 @@
 mod action;
-mod buffer_cache;
 mod byte_cursor;
 mod id;
 pub mod math;
@@ -9,9 +8,9 @@ mod style;
 mod tests;
 mod text_manager;
 mod text_params;
+mod buffer_utils;
 
 pub use action::{Action, ActionResult};
-pub use buffer_cache::{BufferCache, GlyphPosition};
 pub use cosmic_text;
 pub use id::Id;
 pub use math::{Point, Rect};

@@ -8,7 +8,7 @@ pub fn test() {
     let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -16,7 +16,7 @@ pub fn test() {
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
-    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+    let mono_width = text_state.first_glyph().unwrap().w;
 
     assert!(mono_width > 0.0);
 
@@ -56,7 +56,7 @@ pub fn test_cyrillic() {
     let text_id = Id::new(0);
     let initial_text = "Привет Мир".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -65,7 +65,7 @@ pub fn test_cyrillic() {
     text_state.are_actions_enabled = true;
 
     text_state.recalculate(&mut ctx, UpdateReason::Unknown);
-    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+    let mono_width = text_state.first_glyph().unwrap().w;
 
     assert!(mono_width > 0.0);
 
@@ -126,7 +126,7 @@ pub fn test_insert_into_empty_text() {
     let text_id = Id::new(0);
     let initial_text = "".to_string(); // Empty text
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -155,7 +155,7 @@ pub fn test_insert_into_empty_text() {
 
     // Verify caret offset - this should fail due to the bug
     // The caret should have moved to the right
-    let mono_width = ctx.buffer_cache.first_glyph(&text_id).unwrap().w;
+    let mono_width = text_state.first_glyph().unwrap().w;
 
     assert_eq!(
         text_state.relative_caret_offset_horizontal,
@@ -171,7 +171,7 @@ pub fn test_delete_at_end_of_text() {
     let text_id = Id::new(0);
     let initial_text = "Hello".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -209,7 +209,7 @@ pub fn test_insert_newline_at_end_of_text() {
     let text_id = Id::new(0);
     let initial_text = "Hello".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id);
+    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
     text_state.params.set_style(&mono_style_test());
     text_state.params.set_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;

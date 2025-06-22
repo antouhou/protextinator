@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::{
-    cosmic_text::FontSystem, BufferCache, FontFamily, FontSize, Id, LineHeight, Point, Rect,
+    cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect,
     TextStyle, TextWrap, VerticalTextAlignment,
 };
 use std::sync::Arc;
@@ -17,7 +17,6 @@ use winit::{
 struct App<'a> {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer<'a>>,
-    text_manager: BufferCache,
     font_system: Option<FontSystem>,
     text_content: String,
     cursor_position: usize,
@@ -34,7 +33,6 @@ impl<'a> App<'a> {
         Self {
             window: None,
             renderer: None,
-            text_manager: BufferCache::new(),
             font_system: None,
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
