@@ -24,7 +24,7 @@ impl TextParams {
 
             changed: true,
         };
-        
+
         params.set_text(&text);
         params
     }
