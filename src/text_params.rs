@@ -16,14 +16,17 @@ pub struct TextParams {
 impl TextParams {
     #[inline(always)]
     pub fn new(size: Size, style: TextStyle, text: String, buffer_id: Id) -> Self {
-        Self {
+        let mut params = Self {
             size,
             style,
-            text,
+            text: "".to_string(),
             buffer_id,
 
             changed: true,
-        }
+        };
+        
+        params.set_text(&text);
+        params
     }
 
     /// Updates the text parameters with new values if they differ from the current ones and
