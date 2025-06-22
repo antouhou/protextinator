@@ -102,38 +102,50 @@ impl BufferCache {
         )
     }
 
+    /// Shapes the text buffer if it is not in the cache or if `reshape` is true.
+    /// Returns the inner buffer dimensions if the buffer was created or updated
     pub fn shape_buffer_if_needed(
         &mut self,
         params: &TextParams,
         font_system: &mut FontSystem,
         reshape: bool,
         shape_till_cursor: Option<Cursor>,
-    ) {
+    ) -> Option<Size> {
         let buffer_not_in_cache = self.buffer_no_retain(&params.buffer_id()).is_none();
         if buffer_not_in_cache || reshape {
-            self.create_or_update_and_shape_text_buffer(params, font_system, shape_till_cursor);
+            Some(self.create_or_update_and_shape_text_buffer(
+                params,
+                font_system,
+                shape_till_cursor,
+            ))
+        } else {
+            None
         }
     }
 
+    /// Creates a new buffer. Returns inner buffer dimensions.
     fn create_buffer(
         &mut self,
         params: &TextParams,
         font_system: &mut FontSystem,
         cursor: Option<cosmic_text::Cursor>,
-    ) {
+    ) -> Size {
         let mut buffer = Buffer::new(font_system, params.metrics());
 
-        BufferCache::update_buffer(params, &mut buffer, font_system, cursor);
+        let size = BufferCache::update_buffer(params, &mut buffer, font_system, cursor);
 
         self.insert_buffer(params.buffer_id(), buffer);
+
+        size
     }
 
+    /// Returns inner buffer dimensions
     fn update_buffer(
         params: &TextParams,
         buffer: &mut Buffer,
         font_system: &mut FontSystem,
         cursor: Option<Cursor>,
-    ) {
+    ) -> Size {
         let old_scroll = buffer.scroll();
 
         buffer.set_metrics(font_system, params.metrics());
@@ -153,7 +165,7 @@ impl BufferCache {
 
         buffer.set_text(
             font_system,
-            params.text(),
+            params.text_for_internal_use(),
             &Attrs::new()
                 .color(font_color.into())
                 .family(font_family.to_fontdb_family())
@@ -161,7 +173,23 @@ impl BufferCache {
             Shaping::Advanced,
         );
 
+        let mut buffer_measurement = Size::default();
         for line in buffer.lines.iter_mut() {
+            for line in line
+                .layout(
+                    font_system,
+                    text_style.font_size.value(),
+                    Some(text_area_size.x),
+                    text_style.wrap.unwrap_or_default().into(),
+                    None,
+                    // TODO: what is the default tab width? Make it configurable?
+                    2,
+                )
+                .iter()
+            {
+                buffer_measurement.y += line.line_height_opt.unwrap_or(text_style.line_height_pt());
+                buffer_measurement.x = buffer_measurement.x.max(line.w);
+            }
             line.set_align(horizontal_alignment.into());
         }
 
@@ -173,39 +201,22 @@ impl BufferCache {
 
         // Restore the scroll position, so adding text does not change the scroll position.
         buffer.set_scroll(old_scroll);
+        buffer_measurement
     }
 
+    /// Creates a new buffer or updates an existing one, and shapes it. Returns inner buffer
+    /// dimensions.
     pub fn create_or_update_and_shape_text_buffer(
         &mut self,
         params: &TextParams,
         font_system: &mut FontSystem,
         cursor: Option<cosmic_text::Cursor>,
-    ) {
+    ) -> Size {
         if let Some(buffer) = self.buffer_mut(&params.buffer_id()) {
-            BufferCache::update_buffer(params, buffer, font_system, cursor);
+            BufferCache::update_buffer(params, buffer, font_system, cursor)
         } else {
-            self.create_buffer(params, font_system, cursor);
+            self.create_buffer(params, font_system, cursor)
         }
-    }
-}
-
-pub(crate) fn buffer_height(buffer: &Buffer, style: &TextStyle, scale: f32) -> f32 {
-    let mut min_y = f32::INFINITY;
-    let mut max_y = f32::NEG_INFINITY;
-
-    for layout_run in buffer.layout_runs() {
-        for glyph in layout_run.glyphs.iter() {
-            let physical_glyph = glyph.physical((0.0, 0.0), scale);
-            min_y = min_y.min(physical_glyph.y as f32 + layout_run.line_y);
-            max_y = max_y.max(physical_glyph.y as f32 + layout_run.line_y);
-        }
-    }
-
-    if max_y > min_y {
-        max_y - min_y + style.line_height_pt()
-    } else {
-        // For a single line, return the font size
-        style.line_height_pt()
     }
 }
 
@@ -227,6 +238,7 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
     font_system: &mut FontSystem,
     text_area_size: Size,
     style: &TextStyle,
+    buffer_inner_dimensions: Size,
 ) -> Option<Point> {
     let mut editor = Editor::new(&mut *buffer);
     editor.set_cursor(current_char_byte_cursor.cursor);
@@ -259,9 +271,12 @@ pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
             if style.vertical_alignment == VerticalTextAlignment::End {
                 editor.with_buffer_mut(|buffer| {
                     let mut scroll = buffer.scroll();
-                    if scroll.vertical == 0.0 {
-                        let vertical_scroll_to_align_text =
-                            calculate_vertical_offset(style, text_area_size, buffer);
+                    if scroll.vertical == 0.0 && buffer_inner_dimensions.y < text_area_size.y {
+                        let vertical_scroll_to_align_text = calculate_vertical_offset(
+                            style,
+                            text_area_size,
+                            buffer_inner_dimensions,
+                        );
                         scroll.vertical = vertical_scroll_to_align_text;
                         buffer.set_scroll(scroll);
                     }

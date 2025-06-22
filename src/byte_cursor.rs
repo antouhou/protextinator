@@ -181,22 +181,22 @@ pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> O
 
     // Original logic for other cases
     let mut cumulative = 0;
-    let mut line_heh = None;
-    let mut char_heh = None;
+    let mut maybe_line = None;
+    let mut maybe_char = None;
     // Iterator over lines
     for (line_number, line) in full_text.lines().enumerate() {
         let line_len = line.len();
         // Check if char_index is in the current line.
-        if char_byte_offset < cumulative + line_len {
-            line_heh = Some(line_number);
-            char_heh = Some(char_byte_offset.saturating_sub(cumulative));
+        if char_byte_offset <= cumulative + line_len {
+            maybe_line = Some(line_number);
+            maybe_char = Some(char_byte_offset.saturating_sub(cumulative));
             break;
         }
         // Add one for the newline character removed by .lines()
         cumulative += line_len + 1;
     }
 
-    if let (Some(line), Some(index)) = (line_heh, char_heh) {
+    if let (Some(line), Some(index)) = (maybe_line, maybe_char) {
         Some(Cursor {
             line,
             index,

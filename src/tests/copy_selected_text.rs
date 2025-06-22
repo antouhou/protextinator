@@ -197,11 +197,6 @@ pub fn test_copy_selection_from_middle() {
     // Verify text is selected
     assert!(text_state.is_text_selected());
 
-    // TODO: move cursor when dragged?
-    // // Verify cursor position after dragging
-    // let cursor_pos_after_drag = text_state.cursor.char_index(text_state.text());
-    // assert_eq!(cursor_pos_after_drag, Some(13)); // Should be after 'o' in "brown"
-
     // Get the selected text and verify it's correct
     let selected_text = text_state.selected_text();
     assert!(selected_text.is_some());

@@ -1,6 +1,6 @@
 use crate::action::{Action, ActionResult};
 use crate::buffer_cache::{
-    buffer_height, calculate_caret_position_pt_and_update_vertical_scroll, vertical_offset,
+    calculate_caret_position_pt_and_update_vertical_scroll, vertical_offset,
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
@@ -60,6 +60,8 @@ pub struct TextState {
 
     pub last_scroll_timestamp: Instant,
     pub scroll_interval: Duration,
+
+    pub inner_dimensions: Size,
 }
 
 impl TextState {
@@ -83,6 +85,8 @@ impl TextState {
             caret_width: 3.0,
             is_selectable: false,
             is_editable: false,
+
+            inner_dimensions: Size::ZERO,
         }
     }
 
@@ -95,7 +99,7 @@ impl TextState {
 
         self.reshape_if_params_changed(ctx, None);
 
-        if self.cursor.byte_character_start > self.params.text().len() {
+        if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
         }
     }
@@ -130,11 +134,18 @@ impl TextState {
     }
 
     pub fn remove_char_at_cursor(&mut self) {
-        if !self.params.text().is_empty() {
-            if let Some(prev_char) = self.cursor.prev_char_byte_offset(self.params.text()) {
+        if !self.params.text_for_internal_use().is_empty() {
+            if let Some(prev_char) = self
+                .cursor
+                .prev_char_byte_offset(self.params.text_for_internal_use())
+            {
                 self.remove_character(prev_char);
-                self.cursor
-                    .update_byte_offset(prev_char, self.params.text());
+                if !self
+                    .cursor
+                    .update_byte_offset(prev_char, self.params.text_for_internal_use())
+                {
+                    // TODO: print a warning
+                }
             }
         }
     }
@@ -148,12 +159,13 @@ impl TextState {
     }
 
     pub fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor.update_cursor(cursor, self.params.text());
+        self.cursor
+            .update_cursor(cursor, self.params.text_for_internal_use());
     }
 
     pub fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
         self.cursor
-            .update_byte_offset(byte_offset, self.params.text());
+            .update_byte_offset(byte_offset, self.params.text_for_internal_use());
     }
 
     pub fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
@@ -260,19 +272,22 @@ impl TextState {
         }
     }
 
+    /// Shapes the text buffer if it is not already shaped or if the parameters have changed.
     pub fn shape_if_not_shaped(
-        &self,
+        &mut self,
         ctx: &mut TextContext,
         reshape: bool,
         shape_till_cursor: Option<Cursor>,
     ) {
         let font_system = &mut ctx.font_system;
-        ctx.buffer_cache.shape_buffer_if_needed(
+        if let Some(new_size) = ctx.buffer_cache.shape_buffer_if_needed(
             &self.params,
             font_system,
             reshape,
             shape_till_cursor,
-        );
+        ) {
+            self.inner_dimensions = new_size;
+        }
     }
 
     /// Calculates physical selection area based on the selection start and end glyph indices
@@ -336,7 +351,9 @@ impl TextState {
         self.recalculate(ctx, UpdateReason::Unknown);
     }
 
-    pub fn recalculate_caret_position_and_scroll(
+    /// Buffer needs to be shaped before calling this function, as it relies on the buffer's layout
+    /// and dimensions.
+    fn recalculate_caret_position_and_scroll(
         &mut self,
         text_area_size: Size,
         buffer: &mut Buffer,
@@ -354,6 +371,7 @@ impl TextState {
                     font_system,
                     self.params.size(),
                     self.params.style(),
+                    self.inner_dimensions,
                 )?;
             new_scroll = buffer.scroll();
 
@@ -434,8 +452,11 @@ impl TextState {
             self.relative_caret_offset_vertical = caret_position_relative_to_buffer.y;
         } else {
             // TODO: run the calculation only if something changed
-            let vertical_scroll_to_align_text =
-                calculate_vertical_offset(self.params.style(), text_area_size, buffer);
+            let vertical_scroll_to_align_text = calculate_vertical_offset(
+                self.params.style(),
+                text_area_size,
+                self.inner_dimensions,
+            );
             new_scroll.vertical = vertical_scroll_to_align_text;
         }
 
@@ -589,10 +610,15 @@ impl TextState {
             return ActionResult::None;
         };
 
+        let old_cursor = self.cursor.cursor;
         let mut edit = Editor::new(buffer);
         edit.set_cursor(self.cursor.cursor);
         edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
         self.update_cursor_before_glyph_with_cursor(edit.cursor());
+
+        if self.cursor.cursor == old_cursor {
+            return ActionResult::None;
+        }
 
         ActionResult::CursorUpdated
     }
@@ -693,8 +719,10 @@ impl TextState {
                 text_manager.char_under_position(self, pointer_relative_position)?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
-                self.selection.ends_before_character_byte_cursor =
-                    ByteCursor::from_cursor(byte_cursor_under_position, self.params.text());
+                self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
+                    byte_cursor_under_position,
+                    self.params.text_for_internal_use(),
+                );
             }
 
             // Simple debounce to make scroll speed consistent
@@ -722,14 +750,14 @@ impl TextState {
 pub(crate) fn calculate_vertical_offset(
     text_style: &TextStyle,
     text_area_size: Size,
-    buffer: &Buffer,
+    buffer_inner_dimensions: Size,
 ) -> f32 {
     let text_area_rect = Rect::new((0.0, 0.0).into(), text_area_size);
     let style = text_style;
 
     let vertical_alignment = style.vertical_alignment;
     // TODO: fix scaling
-    let buffer_height = buffer_height(buffer, style, 2.0);
+    let buffer_height = buffer_inner_dimensions.y;
     // TODO: FIX TOP.
     let vertical_offset = vertical_offset(vertical_alignment, text_area_rect, buffer_height);
 

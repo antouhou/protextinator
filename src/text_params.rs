@@ -11,19 +11,24 @@ pub struct TextParams {
     buffer_id: Id,
 
     changed: bool,
+    line_terminator_has_been_added: bool,
 }
 
 impl TextParams {
     #[inline(always)]
     pub fn new(size: Size, style: TextStyle, text: String, buffer_id: Id) -> Self {
-        Self {
+        let mut params = Self {
             size,
             style,
-            text,
+            text: "".to_string(),
             buffer_id,
 
             changed: true,
-        }
+            line_terminator_has_been_added: false,
+        };
+
+        params.set_text(&text);
+        params
     }
 
     /// Updates the text parameters with new values if they differ from the current ones and
@@ -48,6 +53,18 @@ impl TextParams {
 
     #[inline(always)]
     pub fn text(&self) -> &str {
+        if self.line_terminator_has_been_added {
+            // If the line terminator was added by the set_text method, remove it to restore the
+            // original text.
+            &self.text[..self.text.len().saturating_sub(1)]
+        } else {
+            // Otherwise, return the text as is.
+            &self.text
+        }
+    }
+
+    #[inline(always)]
+    pub fn text_for_internal_use(&self) -> &str {
         &self.text
     }
 
@@ -105,6 +122,15 @@ impl TextParams {
     pub fn set_text(&mut self, text: &str) {
         if self.text != text {
             self.text = text.into();
+            if !self.text.ends_with('\n') {
+                // Ensure the text always ends with a line terminator. If the text does not end with
+                // a newline, you'll need to add two newline characters to insert a new line at the
+                // end of the text.
+                self.text.push('\n');
+                self.line_terminator_has_been_added = true;
+            } else {
+                self.line_terminator_has_been_added = false;
+            }
             self.changed = true;
         }
     }

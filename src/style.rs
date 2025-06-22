@@ -46,6 +46,16 @@ impl Eq for LineHeight {}
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FontSize(pub f32);
 
+impl FontSize {
+    pub fn new(size: f32) -> Self {
+        Self(size)
+    }
+
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+}
+
 impl Default for FontSize {
     fn default() -> Self {
         Self(1.5)
