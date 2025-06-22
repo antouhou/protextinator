@@ -52,7 +52,7 @@ impl TextParams {
     }
 
     #[inline(always)]
-    pub fn text(&self) -> &str {
+    pub fn original_text(&self) -> &str {
         if self.line_terminator_has_been_added {
             // If the line terminator was added by the set_text method, remove it to restore the
             // original text.
@@ -120,7 +120,7 @@ impl TextParams {
 
     #[inline(always)]
     pub fn set_text(&mut self, text: &str) {
-        if self.text != text {
+        if self.original_text() != text {
             self.text = text.into();
             if !self.text.ends_with('\n') {
                 // Ensure the text always ends with a line terminator. If the text does not end with

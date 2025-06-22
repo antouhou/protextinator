@@ -1,12 +1,15 @@
 use crate::action::{Action, ActionResult};
-use crate::buffer_cache::{
-    calculate_caret_position_pt_and_update_vertical_scroll, vertical_offset,
+use crate::buffer_utils::{
+    calculate_caret_position_pt_and_update_vertical_scroll, char_under_position, update_buffer,
+    vertical_offset,
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
 use crate::style::TextStyle;
 use crate::text_manager::TextContext;
 use crate::{Id, Point, Rect, TextParams};
+#[cfg(test)]
+use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion, Scroll};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
@@ -62,14 +65,21 @@ pub struct TextState {
     pub scroll_interval: Duration,
 
     pub inner_dimensions: Size,
+    pub buffer: Buffer,
 }
 
 impl TextState {
-    pub fn new_with_text(text: impl Into<String>, text_buffer_id: Id) -> Self {
+    pub fn new_with_text(
+        text: impl Into<String>,
+        text_buffer_id: Id,
+        font_system: &mut FontSystem,
+    ) -> Self {
         let text = text.into();
+        let params = TextParams::new(Size::ZERO, TextStyle::default(), text, text_buffer_id);
+        let metrics = params.metrics();
 
         Self {
-            params: TextParams::new(Size::default(), TextStyle::default(), text, text_buffer_id),
+            params,
 
             is_editing: false,
             are_actions_enabled: false,
@@ -87,6 +97,7 @@ impl TextState {
             is_editable: false,
 
             inner_dimensions: Size::ZERO,
+            buffer: Buffer::new(font_system, metrics),
         }
     }
 
@@ -105,11 +116,11 @@ impl TextState {
     }
 
     pub fn text(&self) -> &str {
-        self.params.text()
+        self.params.original_text()
     }
 
     pub fn text_size(&self) -> usize {
-        self.params.text().chars().count()
+        self.params.original_text().chars().count()
     }
 
     pub fn insert_char_at_cursor(
@@ -245,9 +256,10 @@ impl TextState {
 
     pub fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
-        if !self.params.text().is_empty() {
-            self.selection.ends_before_character_byte_cursor =
-                Some(ByteCursor::after_last_character(self.params.text()))
+        if !self.params.original_text().is_empty() {
+            self.selection.ends_before_character_byte_cursor = Some(
+                ByteCursor::after_last_character(self.params.original_text()),
+            )
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }
@@ -255,7 +267,7 @@ impl TextState {
 
     pub fn substring_byte_offset(&self, start: usize, end: usize) -> String {
         // TODO: add bounds checking
-        self.params.text()[start..end].to_string()
+        self.params.original_text()[start..end].to_string()
     }
 
     pub fn selected_text(&self) -> Option<String> {
@@ -272,26 +284,8 @@ impl TextState {
         }
     }
 
-    /// Shapes the text buffer if it is not already shaped or if the parameters have changed.
-    pub fn shape_if_not_shaped(
-        &mut self,
-        ctx: &mut TextContext,
-        reshape: bool,
-        shape_till_cursor: Option<Cursor>,
-    ) {
-        let font_system = &mut ctx.font_system;
-        if let Some(new_size) = ctx.buffer_cache.shape_buffer_if_needed(
-            &self.params,
-            font_system,
-            reshape,
-            shape_till_cursor,
-        ) {
-            self.inner_dimensions = new_size;
-        }
-    }
-
     /// Calculates physical selection area based on the selection start and end glyph indices
-    fn recalculate_selection_area(&mut self, buffer: &mut Buffer) -> Option<()> {
+    fn recalculate_selection_area(&mut self) -> Option<()> {
         if !self.is_selectable {
             return None;
         }
@@ -311,7 +305,7 @@ impl TextState {
         let end_cursor = selection_ends_before_char_index;
 
         self.selection.lines.clear();
-        for run in buffer.layout_runs() {
+        for run in self.buffer.layout_runs() {
             if let Some((start_x, width)) = run.highlight(start_cursor.cursor, end_cursor.cursor) {
                 self.selection.lines.push(SelectionLine {
                     // TODO: cosmic test doesn't seem to correctly apply horizontal scrolling
@@ -327,24 +321,16 @@ impl TextState {
     }
 
     pub fn recalculate(&mut self, ctx: &mut TextContext, update_reason: UpdateReason) {
-        let text_buffer_id = self.params.buffer_id();
-
         let _reshaped = self.params.changed_since_last_shape();
         // TODO: pass cursor if it's not currently visible
+
         self.reshape_if_params_changed(ctx, None);
-
-        let buffer = ctx
-            .buffer_cache
-            .buffer_no_retain_mut(&text_buffer_id)
-            .unwrap();
-
         self.recalculate_caret_position_and_scroll(
             self.params.size(),
-            buffer,
             update_reason,
             &mut ctx.font_system,
         );
-        self.recalculate_selection_area(buffer);
+        self.recalculate_selection_area();
     }
 
     pub fn recalculate_and_reshape_if_needed(&mut self, ctx: &mut TextContext) {
@@ -356,7 +342,6 @@ impl TextState {
     fn recalculate_caret_position_and_scroll(
         &mut self,
         text_area_size: Size,
-        buffer: &mut Buffer,
         update_reason: UpdateReason,
         font_system: &mut FontSystem,
     ) -> Option<()> {
@@ -366,14 +351,14 @@ impl TextState {
         if self.is_editing {
             let caret_position_relative_to_buffer =
                 calculate_caret_position_pt_and_update_vertical_scroll(
-                    buffer,
+                    &mut self.buffer,
                     self.cursor,
                     font_system,
                     self.params.size(),
                     self.params.style(),
                     self.inner_dimensions,
                 )?;
-            new_scroll = buffer.scroll();
+            new_scroll = self.buffer.scroll();
 
             let current_relative_caret_offset = self.relative_caret_offset_horizontal;
 
@@ -416,7 +401,6 @@ impl TextState {
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
                 let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
-                    buffer,
                     text_area_width,
                     current_relative_caret_offset,
                     new_absolute_caret_offset,
@@ -460,7 +444,7 @@ impl TextState {
             new_scroll.vertical = vertical_scroll_to_align_text;
         }
 
-        buffer.set_scroll(new_scroll);
+        self.buffer.set_scroll(new_scroll);
         self.scroll = new_scroll;
 
         None
@@ -475,7 +459,6 @@ impl TextState {
     /// 3. There's horizontal scroll present
     fn should_update_horizontal_scroll(
         &self,
-        buffer: &Buffer,
         text_area_width: f32,
         old_relative_caret_x: f32,
         new_absolute_caret_x: f32,
@@ -487,7 +470,7 @@ impl TextState {
         }
 
         // Calculate approximate text width based on buffer content
-        let text_overflows = self.estimate_text_overflows(buffer, text_area_width);
+        let text_overflows = self.estimate_text_overflows(text_area_width);
         if !text_overflows {
             return false;
         }
@@ -499,10 +482,11 @@ impl TextState {
         new_absolute_caret_x < old_absolute_caret_x
     }
 
-    /// Estimates if text overflows the given width by examining the buffer's layout
-    fn estimate_text_overflows(&self, buffer: &Buffer, text_area_width: f32) -> bool {
+    /// Estimates if a text overflows the given width by examining the buffer's layout
+    fn estimate_text_overflows(&self, text_area_width: f32) -> bool {
+        // TODO: check if it's better done with inner_dimensions instead of trying to figure out width
         // Look at the last glyph position to estimate if text overflows
-        if let Some(line) = buffer.lines.last() {
+        if let Some(line) = &self.buffer.lines.last() {
             if let Some(layouts) = line.layout_opt().as_ref() {
                 if let Some(layout) = layouts.last() {
                     if let Some(last_glyph) = layout.glyphs.last() {
@@ -517,12 +501,6 @@ impl TextState {
         false
     }
 
-    pub fn not_shaped(&self, ctx: &mut TextContext) -> bool {
-        ctx.buffer_cache
-            .buffer_no_retain(&self.params.buffer_id())
-            .is_none()
-    }
-
     pub fn size_changed(&self, text_area: Size) -> bool {
         self.params.size() != text_area
     }
@@ -532,12 +510,17 @@ impl TextState {
         ctx: &mut TextContext,
         shape_till_cursor: Option<Cursor>,
     ) {
-        self.shape_if_not_shaped(
-            ctx,
-            self.params.changed_since_last_shape(),
-            shape_till_cursor,
-        );
-        self.params.reset_changed();
+        let params_changed = self.params.changed_since_last_shape();
+        if params_changed {
+            let new_size = update_buffer(
+                &self.params,
+                &mut self.buffer,
+                &mut ctx.font_system,
+                shape_till_cursor,
+            );
+            self.inner_dimensions = new_size;
+            self.params.reset_changed();
+        }
     }
 
     fn copy_selected_text(&mut self) -> ActionResult {
@@ -603,18 +586,13 @@ impl TextState {
     }
 
     fn move_cursor(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
-        let Some(buffer) = ctx
-            .buffer_cache
-            .buffer_no_retain_mut(&self.params.buffer_id())
-        else {
-            return ActionResult::None;
-        };
-
+        let buffer = &mut self.buffer;
         let old_cursor = self.cursor.cursor;
         let mut edit = Editor::new(buffer);
         edit.set_cursor(self.cursor.cursor);
         edit.action(&mut ctx.font_system, cosmic_text::Action::Motion(motion));
-        self.update_cursor_before_glyph_with_cursor(edit.cursor());
+        let new_cursor = edit.cursor();
+        self.update_cursor_before_glyph_with_cursor(new_cursor);
 
         if self.cursor.cursor == old_cursor {
             return ActionResult::None;
@@ -686,12 +664,11 @@ impl TextState {
         text_context: &mut TextContext,
         click_position_relative_to_area: Point,
     ) -> Option<()> {
-        let text_manager = &mut text_context.buffer_cache;
         if self.is_selectable || self.is_editable {
             self.reset_selection();
 
             let byte_offset_cursor =
-                text_manager.char_under_position(self, click_position_relative_to_area)?;
+                char_under_position(&self.buffer, click_position_relative_to_area)?;
             self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
 
             // Reset selection to start at the press location
@@ -713,10 +690,9 @@ impl TextState {
         if !is_dragging {
             return None;
         }
-        let text_manager = &mut ctx.buffer_cache;
         if self.is_selectable {
             let byte_cursor_under_position =
-                text_manager.char_under_position(self, pointer_relative_position)?;
+                char_under_position(&self.buffer, pointer_relative_position)?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
                 self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
@@ -742,6 +718,14 @@ impl TextState {
         }
 
         None
+    }
+
+    #[cfg(test)]
+    pub fn first_glyph(&mut self) -> Option<&LayoutGlyph> {
+        self.buffer
+            .layout_runs()
+            .next()
+            .and_then(|run| run.glyphs.first())
     }
 }
 

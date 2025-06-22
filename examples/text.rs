@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::{
-    cosmic_text::FontSystem, BufferCache, FontFamily, FontSize, Id, LineHeight, Point, Rect,
+    cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager,
     TextStyle, TextWrap, VerticalTextAlignment,
 };
 use std::sync::Arc;
@@ -17,10 +17,10 @@ use winit::{
 struct App<'a> {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer<'a>>,
-    text_manager: BufferCache,
     font_system: Option<FontSystem>,
     text_content: String,
     cursor_position: usize,
+    text_manager: TextManager,
 }
 
 impl<'a> Default for App<'a> {
@@ -34,10 +34,10 @@ impl<'a> App<'a> {
         Self {
             window: None,
             renderer: None,
-            text_manager: BufferCache::new(),
             font_system: None,
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
+            text_manager: TextManager::new(),
         }
     }
     fn setup_renderer(&mut self, event_loop: &ActiveEventLoop) {
@@ -94,9 +94,7 @@ impl<'a> App<'a> {
     }
 
     fn render_frame(&mut self) {
-        if let (Some(renderer), Some(font_system)) =
-            (self.renderer.as_mut(), self.font_system.as_mut())
-        {
+        if let Some(renderer) = self.renderer.as_mut() {
             // Clear previous frame
             renderer.clear_draw_queue();
 
@@ -140,12 +138,19 @@ impl<'a> App<'a> {
                 text_id,
             );
 
-            // Use protextinator to shape and cache the text
-            self.text_manager
-                .shape_buffer_if_needed(&params, font_system, false, None);
+            // Create or update the text state
+            if !self.text_manager.text_states.contains_key(&text_id) {
+                self.text_manager
+                    .create_state(text_id, params.original_text().to_string());
+            }
 
-            // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
-            if let Some(buffer) = self.text_manager.buffer_no_retain(&text_id) {
+            // Get the text state and reshape if needed
+            if let Some(text_state) = self.text_manager.text_states.get_mut(&text_id) {
+                text_state.params = params.clone();
+                text_state.reshape_if_params_changed(&mut self.text_manager.text_context, None);
+
+                // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
+                let buffer = &text_state.buffer;
                 // Define the area where the text should be rendered
                 let text_area = MathRect {
                     min: (text_rect.min.x, text_rect.min.y).into(),
@@ -180,14 +185,14 @@ impl<'a> App<'a> {
             renderer.add_shape(cursor, None, (0.0, 0.0), None);
 
             // Show statistics about protextinator's text management
-            if let Some(buffer) = self.text_manager.buffer_no_retain(&text_id) {
+            if let Some(text_state) = self.text_manager.text_states.get(&text_id) {
                 // Create a separate buffer for stats display
                 let stats_id = Id::new("stats_text");
                 let stats_text = format!(
                     "Protextinator Stats:\n• Text lines in buffer: {}\n• Total characters: {}\n• Cached buffers: {}\n• Buffer metadata ID: {}", 
-                    buffer.lines.len(),
+                    text_state.buffer.lines.len(),
                     self.text_content.len(),
-                    self.text_manager.buffer_cache.len(),
+                    self.text_manager.text_states.len(),
                     text_id.0
                 );
 
@@ -207,23 +212,27 @@ impl<'a> App<'a> {
                     font_family: FontFamily::Serif,
                 };
 
-                let text_params = protextinator::TextParams::new(
+                let stats_params = protextinator::TextParams::new(
                     stats_rect.size().into(),
                     stats_style,
                     stats_text,
                     stats_id,
                 );
 
-                // Create another buffer using protextinator for the stats
-                self.text_manager.shape_buffer_if_needed(
-                    &text_params,
-                    font_system,
-                    true, // Always reshape stats as they change
-                    None,
-                );
+                // Create or update the stats text state
+                if !self.text_manager.text_states.contains_key(&stats_id) {
+                    self.text_manager
+                        .create_state(stats_id, stats_params.original_text().to_string());
+                }
 
-                // Render stats using add_text_buffer as well
-                if let Some(stats_buffer) = self.text_manager.buffer_no_retain(&stats_id) {
+                // Get the stats text state and reshape if needed
+                if let Some(stats_text_state) = self.text_manager.text_states.get_mut(&stats_id) {
+                    stats_text_state.params = stats_params.clone();
+                    stats_text_state
+                        .reshape_if_params_changed(&mut self.text_manager.text_context, None);
+
+                    // Render stats using add_text_buffer as well
+                    let stats_buffer = &stats_text_state.buffer;
                     let stats_area = MathRect {
                         min: (stats_rect.min.x, stats_rect.min.y).into(),
                         max: (stats_rect.max.x, stats_rect.max.y).into(),
