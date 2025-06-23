@@ -9,6 +9,7 @@ mod style;
 mod tests;
 mod text_manager;
 mod text_params;
+pub mod utils;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;

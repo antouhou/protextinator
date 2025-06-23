@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use cosmic_text::{Align, Color, Family};
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
+use crate::utils::ArcCowStr;
 
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -129,7 +131,7 @@ impl From<FontColor> for Color {
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FontFamily {
-    Name(Box<str>),
+    Name(ArcCowStr),
     SansSerif,
     Serif,
     Monospace,
@@ -150,7 +152,7 @@ impl From<String> for FontFamily {
 }
 
 impl FontFamily {
-    pub fn new(family: impl Into<Box<str>>) -> Self {
+    pub fn new(family: impl Into<ArcCowStr>) -> Self {
         Self::Name(family.into())
     }
 
