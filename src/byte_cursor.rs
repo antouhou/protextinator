@@ -1,7 +1,7 @@
-use cosmic_text::{Affinity, Buffer, Cursor, FontSystem, LayoutCursor};
+use cosmic_text::{Affinity, Cursor};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ByteCursor {
+pub(crate) struct ByteCursor {
     pub cursor: Cursor,
     pub byte_character_start: usize,
 }
@@ -35,14 +35,6 @@ impl ByteCursor {
         }
     }
 
-    pub fn is_at_string_start(&self) -> bool {
-        self.byte_character_start == 0 && self.cursor.line == 0 && self.cursor.index == 0
-    }
-
-    pub fn is_at_string_end(&self, string: &str) -> bool {
-        self.byte_character_start == string.len()
-    }
-
     pub fn after_last_character(string: &str) -> Self {
         let mut res = Self::before_last_character(string);
         res.cursor.affinity = Affinity::After;
@@ -58,24 +50,6 @@ impl ByteCursor {
         } else {
             None
         }
-    }
-
-    pub fn from_byte_offset(byte_offset: usize, string: &str) -> Option<ByteCursor> {
-        let mut res = Self::string_start();
-        let is_valid_byte_offset = res.update_byte_offset(byte_offset, string);
-        if is_valid_byte_offset {
-            Some(res)
-        } else {
-            None
-        }
-    }
-
-    pub fn layout_cursor(
-        &self,
-        buffer: &mut Buffer,
-        font_system: &mut FontSystem,
-    ) -> Option<LayoutCursor> {
-        buffer.layout_cursor(font_system, self.cursor)
     }
 
     /// Returns char index of the cursor in a given string
@@ -109,54 +83,8 @@ impl ByteCursor {
         }
     }
 
-    pub fn prev_char_byte_offset_or_bound(&self, string: &str) -> usize {
-        previous_char_byte_offset_or_bound(string, self.byte_character_start)
-    }
-
     pub fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {
         previous_char_byte_offset(string, self.byte_character_start)
-    }
-
-    pub fn prev_char_cursor(&self, string: &str) -> Option<ByteCursor> {
-        Self::from_byte_offset(self.prev_char_byte_offset(string)?, string)
-    }
-
-    pub fn next_char_byte_offset(&self, string: &str) -> Option<usize> {
-        // TODO: check bounds first
-        string[self.byte_character_start..]
-            .chars()
-            .next()
-            .map(|ch| self.byte_character_start + ch.len_utf8())
-    }
-
-    pub fn next_char_cursor(&self, string: &str) -> Option<ByteCursor> {
-        Self::from_byte_offset(self.next_char_byte_offset(string)?, string)
-    }
-
-    pub fn next_or_this_cursor(&self, string: &str) -> ByteCursor {
-        self.next_char_cursor(string).unwrap_or_else(|| {
-            let mut res = *self;
-            res.cursor.affinity = Affinity::After;
-            res
-        })
-    }
-
-    pub fn move_to_previous_char(&mut self, string: &str) -> bool {
-        if let Some(prev_cursor) = self.prev_char_cursor(string) {
-            *self = prev_cursor;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn move_to_next_char(&mut self, string: &str) -> bool {
-        if let Some(next_cursor) = self.next_char_cursor(string) {
-            *self = next_cursor;
-            true
-        } else {
-            false
-        }
     }
 }
 
@@ -245,23 +173,6 @@ fn previous_char_byte_offset(text: &str, current: usize) -> Option<usize> {
         .char_indices()
         .last()
         .map(|(byte_idx, _ch)| byte_idx)
-}
-
-fn previous_char_byte_offset_or_bound(text: &str, current: usize) -> usize {
-    if current == 0 {
-        return 0;
-    }
-    if current > text.len() {
-        return text.len();
-    }
-
-    // take everything up to `current`, iterate its character indices,
-    // and pick the last one
-    text[..current]
-        .char_indices()
-        .last()
-        .map(|(byte_idx, _ch)| byte_idx)
-        .expect("current is within bounds, so there must be a previous char")
 }
 
 pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {
