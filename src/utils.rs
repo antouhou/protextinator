@@ -1,6 +1,6 @@
-use std::{ops::Deref, sync::Arc};
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{ops::Deref, sync::Arc};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ArcCowStr {

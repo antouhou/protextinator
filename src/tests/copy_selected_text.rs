@@ -1,4 +1,3 @@
-use crate::state::UpdateReason;
 use crate::tests::mono_style_test;
 use crate::{Action, ActionResult, Id, Point, TextContext, TextState};
 
@@ -10,17 +9,17 @@ pub fn test_copy_empty_selection() {
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
 
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // No selection, cursor at the beginning
-    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
+    assert_eq!(text_state.cursor_char_index(), Some(0));
     assert!(!text_state.is_text_selected());
 
     // Try to copy with no selection
@@ -35,18 +34,18 @@ pub fn test_copy_partial_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
+    assert_eq!(text_state.cursor_char_index(), Some(0));
 
     // Simulate dragging to select "Hello"
     text_state.handle_drag(&mut ctx, true, Point { x: 40.0, y: 10.0 });
@@ -64,14 +63,14 @@ pub fn test_copy_full_selection() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // Select all text
     let result = text_state.apply_action(&mut ctx, &Action::SelectAll);
@@ -93,18 +92,18 @@ pub fn test_copy_cyrillic_text() {
     let initial_text = "Привет Мир".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
+    assert_eq!(text_state.cursor_char_index(), Some(0));
 
     // Simulate dragging to select "Привет"
     text_state.handle_drag(&mut ctx, true, Point { x: 50.0, y: 10.0 });
@@ -122,15 +121,15 @@ pub fn test_copy_after_editing() {
     let initial_text = "Hello World".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((200.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
 
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // Insert text at the beginning
     text_state.apply_action(&mut ctx, &Action::InsertChar("Test ".into()));
@@ -138,7 +137,7 @@ pub fn test_copy_after_editing() {
 
     // Set up a selection by clicking and dragging
     text_state.handle_press(&mut ctx, Point { x: 0.0, y: 10.0 });
-    assert_eq!(text_state.cursor.char_index(text_state.text()), Some(0));
+    assert_eq!(text_state.cursor_char_index(), Some(0));
 
     // Simulate dragging to select "Test "
     text_state.handle_drag(&mut ctx, true, Point { x: 40.0, y: 10.0 });
@@ -156,14 +155,14 @@ pub fn test_copy_selection_from_middle() {
     let initial_text = "The quick brown fox jumps over the lazy dog".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
-    text_state.params.set_style(&mono_style_test());
-    text_state.params.set_size(&Point::from((400.0, 25.0)));
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((400.0, 25.0)));
     text_state.is_editable = true;
     text_state.is_editing = true;
     text_state.is_selectable = true;
     text_state.are_actions_enabled = true;
 
-    text_state.recalculate(&mut ctx, UpdateReason::Unknown);
+    text_state.recalculate(&mut ctx);
 
     // Position cursor before the middle of the line (at 'b' in "brown")
     // First, get the mono width to calculate the position
@@ -180,7 +179,7 @@ pub fn test_copy_selection_from_middle() {
     );
 
     // Verify cursor position after clicking
-    let cursor_pos_after_click = text_state.cursor.char_index(text_state.text());
+    let cursor_pos_after_click = text_state.cursor_char_index();
     assert_eq!(cursor_pos_after_click, Some(10)); // Should be at 'b' in "brown"
 
     // Drag for a couple of symbols (select "bro")

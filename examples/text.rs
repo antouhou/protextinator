@@ -146,11 +146,14 @@ impl<'a> App<'a> {
 
             // Get the text state and reshape if needed
             if let Some(text_state) = self.text_manager.text_states.get_mut(&text_id) {
-                text_state.params = params.clone();
-                text_state.reshape_if_params_changed(&mut self.text_manager.text_context, None);
+                text_state.set_text(params.original_text());
+                text_state.set_outer_size(&params.size());
+                text_state.set_style(params.style());
+                text_state.set_buffer_id(&params.buffer_id());
+                text_state.recalculate(&mut self.text_manager.text_context);
 
                 // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
-                let buffer = &text_state.buffer;
+                let buffer = &text_state.buffer();
                 // Define the area where the text should be rendered
                 let text_area = MathRect {
                     min: (text_rect.min.x, text_rect.min.y).into(),
@@ -190,7 +193,7 @@ impl<'a> App<'a> {
                 let stats_id = Id::new("stats_text");
                 let stats_text = format!(
                     "Protextinator Stats:\n• Text lines in buffer: {}\n• Total characters: {}\n• Cached buffers: {}\n• Buffer metadata ID: {}", 
-                    text_state.buffer.lines.len(),
+                    text_state.buffer().lines.len(),
                     self.text_content.len(),
                     self.text_manager.text_states.len(),
                     text_id.0
@@ -227,12 +230,14 @@ impl<'a> App<'a> {
 
                 // Get the stats text state and reshape if needed
                 if let Some(stats_text_state) = self.text_manager.text_states.get_mut(&stats_id) {
-                    stats_text_state.params = stats_params.clone();
-                    stats_text_state
-                        .reshape_if_params_changed(&mut self.text_manager.text_context, None);
+                    stats_text_state.set_text(stats_params.original_text());
+                    stats_text_state.set_outer_size(&stats_params.size());
+                    stats_text_state.set_style(stats_params.style());
+                    stats_text_state.set_buffer_id(&stats_params.buffer_id());
+                    stats_text_state.recalculate(&mut self.text_manager.text_context);
 
                     // Render stats using add_text_buffer as well
-                    let stats_buffer = &stats_text_state.buffer;
+                    let stats_buffer = &stats_text_state.buffer();
                     let stats_area = MathRect {
                         min: (stats_rect.min.x, stats_rect.min.y).into(),
                         max: (stats_rect.max.x, stats_rect.max.y).into(),

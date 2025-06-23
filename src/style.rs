@@ -1,9 +1,8 @@
-use std::borrow::Cow;
+use crate::utils::ArcCowStr;
 use cosmic_text::{Align, Color, Family};
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
-use crate::utils::ArcCowStr;
 
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
