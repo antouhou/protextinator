@@ -1,4 +1,4 @@
-use crate::{
+use crate::style::{
     FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap,
     VerticalTextAlignment,
 };

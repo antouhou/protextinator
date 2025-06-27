@@ -224,8 +224,13 @@ impl From<TextAlignment> for Option<Align> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default)]
 pub enum VerticalTextAlignment {
     #[default]
+    /// No vertical alignment, defaulting to the top of the text area. Text can be scrolled vertically.
+    None,
+    /// Aligns text to the top of the text area.
     Start,
+    /// Aligns text to the bottom of the text area.
     End,
+    /// Centers text vertically within the text area.
     Center,
 }
 

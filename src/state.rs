@@ -1,13 +1,14 @@
 use crate::action::{Action, ActionResult};
 use crate::buffer_utils::{
-    calculate_caret_position_pt_and_update_vertical_scroll, char_under_position, update_buffer,
+    adjust_vertical_scroll_to_make_caret_visible, char_under_position, update_buffer,
     vertical_offset,
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
-use crate::style::TextStyle;
+use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
-use crate::{Id, Point, Rect, TextParams};
+use crate::text_params::TextParams;
+use crate::{Id, Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
@@ -48,7 +49,7 @@ pub struct TextState {
     params: TextParams,
     cursor: ByteCursor,
     // Caret position relative to the buffer viewport with scroll applied
-    relative_caret_position: Point,
+    relative_caret_position: Option<Point>,
     caret_width: f32,
     selection: Selection,
 
@@ -87,7 +88,7 @@ impl TextState {
             are_actions_enabled: false,
 
             cursor: ByteCursor::default(),
-            relative_caret_position: Point::default(),
+            relative_caret_position: None,
 
             selection: Selection::default(),
             last_scroll_timestamp: Instant::now(),
@@ -111,8 +112,9 @@ impl TextState {
         self.caret_width
     }
 
-    /// Caret position relative to the buffer viewport with scroll applied.
-    pub fn caret_position_relative(&self) -> Point {
+    /// Caret position relative to the buffer viewport with scroll applied. Returns `None` if
+    /// the caret is not visible or the buffer is not shaped yet.
+    pub fn caret_position_relative(&self) -> Option<Point> {
         self.relative_caret_position
     }
 
@@ -126,7 +128,7 @@ impl TextState {
     pub fn set_text_and_reshape(&mut self, text: &str, ctx: &mut TextContext) {
         self.params.set_text(text);
 
-        self.reshape_if_params_changed(ctx, None);
+        self.reshape_if_params_changed(ctx);
 
         if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
@@ -207,7 +209,7 @@ impl TextState {
     fn insert_char_at_cursor(&mut self, character: char, ctx: &mut TextContext) -> ActionResult {
         self.params
             .insert_char(self.cursor.byte_character_start, character);
-        self.reshape_if_params_changed(ctx, None);
+        self.reshape_if_params_changed(ctx);
         self.move_cursor(ctx, Motion::Next);
 
         ActionResult::TextChanged
@@ -365,6 +367,66 @@ impl TextState {
         }
     }
 
+    // Buffer must be shaped and updated before calling this function
+    pub fn absolute_scroll(&self) -> Point {
+        let scroll = self.buffer.scroll();
+        let scroll_line = scroll.line;
+        let scroll_vertical = scroll.vertical;
+        let scroll_horizontal = scroll.horizontal;
+        let mut line_vertical_start = 0.0;
+        let line_height = self.style().line_height_pt();
+        for (line_i, line) in self.buffer.lines.iter().enumerate() {
+            if line_i == scroll_line {
+                // Found line
+                break;
+            }
+            if let Some(layout_lines) = line.layout_opt() {
+                for layout_line in layout_lines {
+                    line_vertical_start += layout_line.line_height_opt.unwrap_or(line_height);
+                }
+            }
+        }
+
+        Point {
+            x: scroll_horizontal,
+            y: scroll_vertical + line_vertical_start,
+        }
+    }
+
+    pub fn set_absolute_scroll(&mut self, scroll: Point) {
+        let mut new_scroll = self.buffer.scroll();
+
+        new_scroll.horizontal = scroll.x;
+
+        let line_height = self.style().line_height_pt();
+        let mut line_index = 0;
+        let mut accumulated_height = 0.0;
+
+        for (i, line) in self.buffer.lines.iter().enumerate() {
+            let mut line_height_total = 0.0;
+
+            if let Some(layout_lines) = line.layout_opt() {
+                for layout_line in layout_lines {
+                    line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                }
+            }
+
+            if accumulated_height + line_height_total > scroll.y {
+                line_index = i;
+                break;
+            }
+
+            accumulated_height += line_height_total;
+            line_index = i + 1; // In case we don't break, this will be the last line
+        }
+
+        // Set the line and calculate the remaining vertical offset
+        new_scroll.line = line_index;
+        new_scroll.vertical = scroll.y - accumulated_height;
+
+        self.buffer.set_scroll(new_scroll);
+    }
+
     /// Calculates physical selection area based on the selection start and end glyph indices
     fn recalculate_selection_area(&mut self) -> Option<()> {
         if !self.is_selectable {
@@ -401,77 +463,83 @@ impl TextState {
         None
     }
 
-    fn recalculate_internal(&mut self, ctx: &mut TextContext, update_reason: UpdateReason) {
-        let _reshaped = self.params.changed_since_last_shape();
-        // TODO: pass cursor if it's not currently visible
-
-        self.reshape_if_params_changed(ctx, None);
-        self.recalculate_caret_position_and_scroll(
-            self.params.size(),
-            update_reason,
-            &mut ctx.font_system,
-        );
+    pub fn recalculate_with_update_reason(
+        &mut self,
+        ctx: &mut TextContext,
+        update_reason: UpdateReason,
+    ) {
+        self.reshape_if_params_changed(ctx);
+        self.adjust_scroll_if_cursor_moved(update_reason, &mut ctx.font_system);
+        // TODO: do only if scroll/selection changed
         self.recalculate_selection_area();
+
+        // TODO: do that if the buffer was reshaped
+        self.relative_caret_position = self.calculate_caret_position();
+        self.align_vertically();
     }
 
-    // TODO: Add a method to make other parameters same as `params`, and recalculate lazily
-    //  on getters
     /// Recalculates and reshapes the text buffer, scroll, caret position and selection area.
     /// The results are cached, so don't be afraid to call this function multiple times.
     pub fn recalculate(&mut self, ctx: &mut TextContext) {
-        self.recalculate_internal(ctx, UpdateReason::Unknown);
+        self.recalculate_with_update_reason(ctx, UpdateReason::Unknown);
+    }
+
+    fn calculate_caret_position(&mut self) -> Option<Point> {
+        let horizontal_scroll = self.buffer.scroll().horizontal;
+        let mut editor = Editor::new(&mut self.buffer);
+        editor.set_cursor(self.cursor.cursor);
+
+        editor.cursor_position().map(|pos| {
+            let mut point = Point::from(pos);
+            // Adjust the point to account for horizontal scroll, as cosmic_text does not
+            //  support horizontal scrolling natively.
+            point.x -= horizontal_scroll;
+            point
+        })
+    }
+
+    fn align_vertically(&mut self) {
+        if matches!(self.style().vertical_alignment, VerticalTextAlignment::None) {
+            return;
+        }
+
+        let mut scroll = self.buffer.scroll();
+        let text_area_size = self.params.size();
+        let vertical_scroll_to_align_text =
+            calculate_vertical_offset(self.params.style(), text_area_size, self.inner_dimensions);
+        scroll.vertical = vertical_scroll_to_align_text;
+        self.buffer.set_scroll(scroll);
     }
 
     /// Buffer needs to be shaped before calling this function, as it relies on the buffer's layout
     /// and dimensions.
-    fn recalculate_caret_position_and_scroll(
+    fn adjust_scroll_if_cursor_moved(
         &mut self,
-        text_area_size: Size,
         update_reason: UpdateReason,
         font_system: &mut FontSystem,
     ) -> Option<()> {
-        let old_scroll = self.buffer.scroll();
-        let mut new_scroll = old_scroll;
+        if update_reason.is_cursor_updated() {
+            let text_area_size = self.params.size();
+            let old_scroll = self.buffer.scroll();
 
-        if self.is_editing {
-            let caret_position_relative_to_buffer =
-                calculate_caret_position_pt_and_update_vertical_scroll(
-                    &mut self.buffer,
-                    self.cursor,
-                    font_system,
-                    self.params.size(),
-                    self.params.style(),
-                    self.inner_dimensions,
-                )?;
-            new_scroll = self.buffer.scroll();
+            let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
+                &mut self.buffer,
+                self.cursor,
+                font_system,
+                self.params.size(),
+                self.params.style(),
+            )?;
+            let mut new_scroll = self.buffer.scroll();
 
-            let current_relative_caret_offset = self.relative_caret_position.x;
+            let current_relative_caret_offset = caret_position_relative_to_buffer.x;
 
             let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
             let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
-            // if let Some(absolute_caret_offset) = caret_position_relative_to_buffer.x {
-            //     // Not an empty line
-            //     absolute_caret_offset
-            // } else {
-            //     let container_alignment = self.text_style.horizontal_alignment;
-            //     // This means that this is an empty line, and the caret should be aligned to according
-            //     //  to the horizontal text alignment
-            //     match container_alignment {
-            //         TextAlignment::Start => 0.0,
-            //         TextAlignment::End => text_area_width,
-            //         TextAlignment::Center => text_area_width / 2.0,
-            //         // TODO: check that implementations after this are actually correct
-            //         TextAlignment::Left => 0.0,
-            //         TextAlignment::Right => text_area_width,
-            //         TextAlignment::Justify => 0.0,
-            //     }
-            // };
 
             // TODO: A little hack to set horizontal scroll
-            let mut new_relative_caret_offset = current_relative_caret_offset;
 
             let current_absolute_visible_text_area = (
                 old_scroll.horizontal,
@@ -497,39 +565,22 @@ impl TextState {
                 if should_update_horizontal_scroll && !is_moving_caret {
                     new_scroll.horizontal =
                         new_absolute_caret_offset - current_relative_caret_offset;
-                    new_relative_caret_offset = current_relative_caret_offset; // Keep caret visually fixed
                 } else {
-                    new_relative_caret_offset = new_absolute_caret_offset - old_scroll.horizontal;
                     new_scroll.horizontal = old_scroll.horizontal;
                 }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
                     new_absolute_caret_offset - text_area_width + self.caret_width;
-                // Adjust caret offset to be relative to the new scroll
-                new_relative_caret_offset = text_area_width - self.caret_width;
             } else if new_absolute_caret_offset < min {
                 new_scroll.horizontal = new_absolute_caret_offset;
-                new_relative_caret_offset = 0.0;
             } else if new_absolute_caret_offset < 0.0 {
                 new_scroll.horizontal = 0.0;
-                new_relative_caret_offset = 0.0;
             } else {
                 // Do nothing?
             }
 
-            self.relative_caret_position.x = new_relative_caret_offset;
-            self.relative_caret_position.y = caret_position_relative_to_buffer.y;
-        } else {
-            // TODO: run the calculation only if something changed
-            let vertical_scroll_to_align_text = calculate_vertical_offset(
-                self.params.style(),
-                text_area_size,
-                self.inner_dimensions,
-            );
-            new_scroll.vertical = vertical_scroll_to_align_text;
+            self.buffer.set_scroll(new_scroll);
         }
-
-        self.buffer.set_scroll(new_scroll);
 
         None
     }
@@ -585,19 +636,10 @@ impl TextState {
         false
     }
 
-    fn reshape_if_params_changed(
-        &mut self,
-        ctx: &mut TextContext,
-        shape_till_cursor: Option<Cursor>,
-    ) {
+    fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
-            let new_size = update_buffer(
-                &self.params,
-                &mut self.buffer,
-                &mut ctx.font_system,
-                shape_till_cursor,
-            );
+            let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
             self.inner_dimensions = new_size;
             self.params.reset_changed();
         }
@@ -613,20 +655,22 @@ impl TextState {
             self.reset_selection_end();
         }
 
-        self.recalculate_internal(ctx, UpdateReason::InsertedText);
+        self.params
+            .insert_str(self.cursor.byte_character_start, text);
+        self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
     fn select_all_recalculate(&mut self, ctx: &mut TextContext) -> ActionResult {
         self.select_all();
-        self.recalculate_internal(ctx, UpdateReason::SelectionChanged);
+        self.recalculate_with_update_reason(ctx, UpdateReason::SelectionChanged);
         ActionResult::CursorUpdated
     }
 
     fn cut_selected_text(&mut self, ctx: &mut TextContext) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("").to_string();
         self.remove_selected_text();
-        self.recalculate_internal(ctx, UpdateReason::DeletedTextAtCursor);
+        self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
         ActionResult::InsertToClipboard(selected_text)
     }
 
@@ -639,7 +683,7 @@ impl TextState {
         } else {
             self.remove_char_at_cursor();
         }
-        self.recalculate_internal(ctx, UpdateReason::DeletedTextAtCursor);
+        self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
         ActionResult::TextChanged
     }
 
@@ -650,7 +694,7 @@ impl TextState {
             self.move_cursor(ctx, Motion::Right);
         }
         self.reset_selection();
-        self.recalculate_internal(ctx, UpdateReason::MoveCaret);
+        self.recalculate_with_update_reason(ctx, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -661,7 +705,7 @@ impl TextState {
             self.move_cursor(ctx, Motion::Left);
         }
         self.reset_selection();
-        self.recalculate_internal(ctx, UpdateReason::MoveCaret);
+        self.recalculate_with_update_reason(ctx, UpdateReason::MoveCaret);
         ActionResult::CursorUpdated
     }
 
@@ -684,7 +728,7 @@ impl TextState {
     fn move_cursor_recalculate(&mut self, ctx: &mut TextContext, motion: Motion) -> ActionResult {
         let res = self.move_cursor(ctx, motion);
         self.reset_selection();
-        self.recalculate_internal(ctx, UpdateReason::MoveCaret);
+        self.recalculate_with_update_reason(ctx, UpdateReason::MoveCaret);
         res
     }
 
@@ -698,7 +742,7 @@ impl TextState {
             self.reset_selection_end();
         }
 
-        self.recalculate_internal(ctx, UpdateReason::InsertedText);
+        self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
 
@@ -755,7 +799,7 @@ impl TextState {
             self.selection.origin_character_byte_cursor = Some(self.cursor);
             self.selection.ends_before_character_byte_cursor = None;
 
-            self.recalculate_internal(text_context, UpdateReason::MoveCaret);
+            self.recalculate_with_update_reason(text_context, UpdateReason::MoveCaret);
         }
 
         None
@@ -794,7 +838,7 @@ impl TextState {
                 }
             }
 
-            self.recalculate_internal(ctx, UpdateReason::MoveCaret);
+            self.recalculate_with_update_reason(ctx, UpdateReason::MoveCaret);
         }
 
         None
@@ -829,9 +873,39 @@ pub(crate) fn calculate_vertical_offset(
 }
 
 pub enum UpdateReason {
-    SelectionChanged,
+    // Cursor changed
     InsertedText,
     MoveCaret,
     DeletedTextAtCursor,
+    // Selection changed
+    SelectionChanged,
+    // Unknown reason, can be used for anything that doesn't fit the above
     Unknown,
+}
+
+impl UpdateReason {
+    pub fn is_selection_changed(&self) -> bool {
+        matches!(self, UpdateReason::SelectionChanged)
+    }
+
+    pub fn is_inserted_text(&self) -> bool {
+        matches!(self, UpdateReason::InsertedText)
+    }
+
+    pub fn is_move_caret(&self) -> bool {
+        matches!(self, UpdateReason::MoveCaret)
+    }
+
+    pub fn is_deleted_text_at_cursor(&self) -> bool {
+        matches!(self, UpdateReason::DeletedTextAtCursor)
+    }
+
+    pub fn is_cursor_updated(&self) -> bool {
+        matches!(
+            self,
+            UpdateReason::MoveCaret
+                | UpdateReason::InsertedText
+                | UpdateReason::DeletedTextAtCursor
+        )
+    }
 }

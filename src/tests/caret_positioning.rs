@@ -20,12 +20,12 @@ pub fn test() {
     assert!(mono_width > 0.0);
 
     assert_eq!(text_state.cursor_char_index(), Some(0));
-    assert_eq!(text_state.caret_position_relative().x, 0.0);
+    assert_eq!(text_state.caret_position_relative().unwrap().x, 0.0);
 
     text_state.handle_press(&mut ctx, Point { x: 25.0, y: 10.0 });
     assert_eq!(text_state.cursor_char_index(), Some(3));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 3.0).floor()
     );
 
@@ -34,7 +34,7 @@ pub fn test() {
     assert_eq!(text_state.text_char_len(), 12);
     assert_eq!(text_state.cursor_char_index(), Some(4));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 4.0).floor()
     );
     assert_eq!(text_state.text(), "Helalo World");
@@ -44,7 +44,7 @@ pub fn test() {
     assert_eq!(text_state.text_char_len(), 12);
     assert_eq!(text_state.cursor_char_index(), Some(5));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 5.0).floor()
     );
 }
@@ -70,14 +70,14 @@ pub fn test_cyrillic() {
 
     assert_eq!(text_state.text_char_len(), 10);
     assert_eq!(text_state.cursor_char_index(), Some(0));
-    assert_eq!(text_state.caret_position_relative().x, 0.0);
+    assert_eq!(text_state.caret_position_relative().unwrap().x, 0.0);
 
     let result = text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
     assert!(matches!(result, ActionResult::CursorUpdated));
     assert_eq!(text_state.text_char_len(), 10);
     assert_eq!(text_state.cursor_char_index(), Some(1));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 1.0).floor()
     );
 
@@ -86,14 +86,14 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.text_char_len(), 10);
     assert_eq!(text_state.cursor_char_index(), Some(2));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 2.0).floor()
     );
 
     text_state.handle_press(&mut ctx, Point { x: 25.0, y: 10.0 });
     assert_eq!(text_state.cursor_char_index(), Some(3));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 3.0).floor()
     );
 
@@ -102,7 +102,7 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.text_char_len(), 11);
     assert_eq!(text_state.cursor_char_index(), Some(4));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 4.0).floor()
     );
     assert_eq!(text_state.text(), "Пришвет Мир");
@@ -112,7 +112,7 @@ pub fn test_cyrillic() {
     assert_eq!(text_state.text_char_len(), 11);
     assert_eq!(text_state.cursor_char_index(), Some(5));
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 5.0).floor()
     );
 }
@@ -138,7 +138,7 @@ pub fn test_insert_into_empty_text() {
     // Verify initial state
     assert_eq!(text_state.text_char_len(), 0);
     assert_eq!(text_state.cursor_char_index(), Some(0));
-    assert_eq!(text_state.caret_position_relative().x, 0.0);
+    assert_eq!(text_state.caret_position_relative().unwrap().x, 0.0);
 
     // Insert the first character
     let result = text_state.apply_action(&mut ctx, &Action::InsertChar("a".into()));
@@ -157,7 +157,7 @@ pub fn test_insert_into_empty_text() {
     let mono_width = text_state.first_glyph().unwrap().w;
 
     assert_eq!(
-        text_state.caret_position_relative().x,
+        text_state.caret_position_relative().unwrap().x,
         (mono_width * 1.0).floor()
     );
 }

@@ -1,10 +1,11 @@
 use crate::math::Size;
 use crate::state::SIZE_EPSILON;
-use crate::{Id, TextStyle};
+use crate::style::TextStyle;
+use crate::Id;
 use cosmic_text::Metrics;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TextParams {
+pub(crate) struct TextParams {
     size: Size,
     style: TextStyle,
     text: String,
@@ -29,16 +30,6 @@ impl TextParams {
 
         params.set_text(&text);
         params
-    }
-
-    /// Updates the text parameters with new values if they differ from the current ones and
-    /// marks the parameters as changed if any of the values changed.
-    #[inline(always)]
-    pub fn update(&mut self, size: &Size, style: &TextStyle, text: &str, buffer_id: &Id) {
-        self.set_size(size);
-        self.set_style(style);
-        self.set_text(text);
-        self.set_buffer_id(buffer_id);
     }
 
     #[inline(always)]

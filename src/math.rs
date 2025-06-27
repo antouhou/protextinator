@@ -50,6 +50,10 @@ pub struct Point {
 impl Point {
     pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
 
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
     #[inline(always)]
     pub fn to_tuple(self) -> (f32, f32) {
         (self.x, self.y)
