@@ -128,7 +128,7 @@ impl TextState {
     pub fn set_text_and_reshape(&mut self, text: &str, ctx: &mut TextContext) {
         self.params.set_text(text);
 
-        self.reshape_if_params_changed(ctx, None);
+        self.reshape_if_params_changed(ctx);
 
         if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
             self.move_cursor(ctx, Motion::BufferEnd);
@@ -209,7 +209,7 @@ impl TextState {
     fn insert_char_at_cursor(&mut self, character: char, ctx: &mut TextContext) -> ActionResult {
         self.params
             .insert_char(self.cursor.byte_character_start, character);
-        self.reshape_if_params_changed(ctx, None);
+        self.reshape_if_params_changed(ctx);
         self.move_cursor(ctx, Motion::Next);
 
         ActionResult::TextChanged
@@ -468,24 +468,16 @@ impl TextState {
         ctx: &mut TextContext,
         update_reason: UpdateReason,
     ) {
-        let _reshaped = self.params.changed_since_last_shape();
-        // TODO: pass cursor if it's not currently visible
-
-        self.reshape_if_params_changed(ctx, None);
-        self.recalculate_caret_position_and_scroll(
-            self.params.size(),
-            update_reason,
-            &mut ctx.font_system,
-        );
+        self.reshape_if_params_changed(ctx);
+        self.adjust_scroll_if_cursor_moved(update_reason, &mut ctx.font_system);
         // TODO: do only if scroll/selection changed
         self.recalculate_selection_area();
 
+        // TODO: do that if the buffer was reshaped
         self.relative_caret_position = self.calculate_caret_position();
         self.align_vertically();
     }
 
-    // TODO: Add a method to make other parameters same as `params`, and recalculate lazily
-    //  on getters
     /// Recalculates and reshapes the text buffer, scroll, caret position and selection area.
     /// The results are cached, so don't be afraid to call this function multiple times.
     pub fn recalculate(&mut self, ctx: &mut TextContext) {
@@ -521,22 +513,21 @@ impl TextState {
 
     /// Buffer needs to be shaped before calling this function, as it relies on the buffer's layout
     /// and dimensions.
-    fn recalculate_caret_position_and_scroll(
+    fn adjust_scroll_if_cursor_moved(
         &mut self,
-        text_area_size: Size,
         update_reason: UpdateReason,
         font_system: &mut FontSystem,
     ) -> Option<()> {
-        let old_scroll = self.buffer.scroll();
-
         if update_reason.is_cursor_updated() {
+            let text_area_size = self.params.size();
+            let old_scroll = self.buffer.scroll();
+
             let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
                 &mut self.buffer,
                 self.cursor,
                 font_system,
                 self.params.size(),
                 self.params.style(),
-                self.inner_dimensions,
             )?;
             let mut new_scroll = self.buffer.scroll();
 
@@ -588,9 +579,6 @@ impl TextState {
                 // Do nothing?
             }
 
-            // self.relative_caret_position = Some(
-            //     Point::new(new_relative_caret_offset, caret_position_relative_to_buffer.y),
-            // );
             self.buffer.set_scroll(new_scroll);
         }
 
@@ -648,19 +636,10 @@ impl TextState {
         false
     }
 
-    fn reshape_if_params_changed(
-        &mut self,
-        ctx: &mut TextContext,
-        shape_till_cursor: Option<Cursor>,
-    ) {
+    fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
-            let new_size = update_buffer(
-                &self.params,
-                &mut self.buffer,
-                &mut ctx.font_system,
-                shape_till_cursor,
-            );
+            let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
             self.inner_dimensions = new_size;
             self.params.reset_changed();
         }
@@ -676,6 +655,8 @@ impl TextState {
             self.reset_selection_end();
         }
 
+        self.params
+            .insert_str(self.cursor.byte_character_start, text);
         self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
