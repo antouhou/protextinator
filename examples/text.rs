@@ -1,8 +1,7 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::{
-    cosmic_text::FontSystem, FontFamily, FontSize, Id, LineHeight, Point, Rect, TextManager,
-    TextStyle, TextWrap, VerticalTextAlignment,
+    cosmic_text::FontSystem, Id, Point, Rect, TextManager,
 };
 use std::sync::Arc;
 use winit::{
@@ -12,6 +11,7 @@ use winit::{
     keyboard::{Key, NamedKey},
     window::{Window, WindowId},
 };
+use protextinator::style::{FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap, VerticalTextAlignment};
 
 /// Main application state
 struct App<'a> {
@@ -121,35 +121,28 @@ impl<'a> App<'a> {
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(
+                font_color: FontColor(protextinator::cosmic_text::Color::rgb(
                     0xE5, 0xE5, 0xE5,
                 )), // Light gray
                 overflow: None,
-                horizontal_alignment: protextinator::TextAlignment::Start,
+                horizontal_alignment: TextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
                 font_family: FontFamily::SansSerif,
             };
-
-            let params = protextinator::TextParams::new(
-                text_rect.size().into(),
-                text_style,
-                self.text_content.clone(),
-                text_id,
-            );
-
+            
             // Create or update the text state
             if !self.text_manager.text_states.contains_key(&text_id) {
                 self.text_manager
-                    .create_state(text_id, params.original_text().to_string());
+                    .create_state(text_id, self.text_content.clone());
             }
 
             // Get the text state and reshape if needed
             if let Some(text_state) = self.text_manager.text_states.get_mut(&text_id) {
-                text_state.set_text(params.original_text());
-                text_state.set_outer_size(&params.size());
-                text_state.set_style(params.style());
-                text_state.set_buffer_id(&params.buffer_id());
+                text_state.set_text(&self.text_content);
+                text_state.set_outer_size(&text_rect.size().into());
+                text_state.set_style(&text_style);
+                text_state.set_buffer_id(&text_id);
                 text_state.recalculate(&mut self.text_manager.text_context);
 
                 // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
@@ -174,13 +167,13 @@ impl<'a> App<'a> {
 
             // Add a simple cursor indicator
             let cursor_line_estimate = (self.cursor_position as f32 / 60.0) as usize; // Rough estimate
-            let cursor_y = 60.0 + (cursor_line_estimate as f32 * params.style().line_height_pt());
+            let cursor_y = 60.0 + (cursor_line_estimate as f32 * text_style.line_height_pt());
             let cursor_x = 60.0 + ((self.cursor_position % 60) as f32 * 12.0); // Very rough approximation
 
             let cursor = Shape::rect(
                 [
                     (cursor_x, cursor_y),
-                    (cursor_x + 2.0, cursor_y + params.style().font_size.0),
+                    (cursor_x + 2.0, cursor_y + text_style.font_size.0),
                 ],
                 Color::rgb(97, 175, 239), // Blue cursor
                 Stroke::new(0.0, Color::TRANSPARENT),
@@ -205,35 +198,28 @@ impl<'a> App<'a> {
                 let stats_style = TextStyle {
                     font_size: FontSize(14.0),
                     line_height: LineHeight(1.2),
-                    font_color: protextinator::FontColor(protextinator::cosmic_text::Color::rgb(
+                    font_color: FontColor(protextinator::cosmic_text::Color::rgb(
                         0x61, 0xAF, 0xEF,
                     )), // Light blue
                     overflow: None,
-                    horizontal_alignment: protextinator::TextAlignment::Start,
+                    horizontal_alignment: TextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,
                     wrap: Some(TextWrap::Wrap),
                     font_family: FontFamily::Serif,
                 };
 
-                let stats_params = protextinator::TextParams::new(
-                    stats_rect.size().into(),
-                    stats_style,
-                    stats_text,
-                    stats_id,
-                );
-
                 // Create or update the stats text state
                 if !self.text_manager.text_states.contains_key(&stats_id) {
                     self.text_manager
-                        .create_state(stats_id, stats_params.original_text().to_string());
+                        .create_state(stats_id, &stats_text);
                 }
 
                 // Get the stats text state and reshape if needed
                 if let Some(stats_text_state) = self.text_manager.text_states.get_mut(&stats_id) {
-                    stats_text_state.set_text(stats_params.original_text());
-                    stats_text_state.set_outer_size(&stats_params.size());
-                    stats_text_state.set_style(stats_params.style());
-                    stats_text_state.set_buffer_id(&stats_params.buffer_id());
+                    stats_text_state.set_text(&stats_text);
+                    stats_text_state.set_outer_size(&stats_rect.size().into());
+                    stats_text_state.set_style(&stats_style);
+                    stats_text_state.set_buffer_id(&stats_id);
                     stats_text_state.recalculate(&mut self.text_manager.text_context);
 
                     // Render stats using add_text_buffer as well

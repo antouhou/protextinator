@@ -1,9 +1,9 @@
 use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect, Size};
 use crate::state::calculate_vertical_offset;
-use crate::style::TextStyle;
-use crate::{TextParams, TextWrap, VerticalTextAlignment};
+use crate::style::{TextStyle, TextWrap, VerticalTextAlignment};
 use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
+use crate::text_params::TextParams;
 
 impl From<TextWrap> for cosmic_text::Wrap {
     fn from(value: TextWrap) -> Self {
@@ -24,10 +24,11 @@ pub(crate) fn vertical_offset(
         VerticalTextAlignment::Start => area.min.y,
         VerticalTextAlignment::End => area.max.y - buffer_height,
         VerticalTextAlignment::Center => area.min.y + (area.height() - buffer_height) / 2.0,
+        VerticalTextAlignment::None => 0.0,
     }
 }
 
-pub(crate) fn calculate_caret_position_pt_and_update_vertical_scroll(
+pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
     buffer: &mut Buffer,
     current_char_byte_cursor: ByteCursor,
     font_system: &mut FontSystem,
