@@ -1,8 +1,8 @@
 use crate::math::Size;
 use crate::state::SIZE_EPSILON;
-use crate::{Id};
-use cosmic_text::Metrics;
 use crate::style::TextStyle;
+use crate::Id;
+use cosmic_text::Metrics;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextParams {

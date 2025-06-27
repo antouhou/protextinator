@@ -4,12 +4,12 @@ mod byte_cursor;
 mod id;
 pub mod math;
 mod state;
+pub mod style;
 #[cfg(test)]
 mod tests;
 mod text_manager;
 mod text_params;
 pub mod utils;
-pub mod style;
 
 pub use action::{Action, ActionResult};
 pub use cosmic_text;

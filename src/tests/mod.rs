@@ -1,5 +1,8 @@
+use crate::style::{
+    FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap,
+    VerticalTextAlignment,
+};
 use cosmic_text::Color;
-use crate::style::{FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap, VerticalTextAlignment};
 
 mod byte_offset;
 mod caret_positioning;

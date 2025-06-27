@@ -7,13 +7,13 @@ use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
 use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
+use crate::text_params::TextParams;
 use crate::{Id, Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
-use crate::text_params::TextParams;
 
 pub const SIZE_EPSILON: f32 = 0.0001;
 
@@ -464,8 +464,8 @@ impl TextState {
     }
 
     pub fn recalculate_with_update_reason(
-        &mut self, ctx:
-        &mut TextContext,
+        &mut self,
+        ctx: &mut TextContext,
         update_reason: UpdateReason,
     ) {
         let _reshaped = self.params.changed_since_last_shape();
@@ -496,7 +496,7 @@ impl TextState {
         let horizontal_scroll = self.buffer.scroll().horizontal;
         let mut editor = Editor::new(&mut self.buffer);
         editor.set_cursor(self.cursor.cursor);
-        
+
         editor.cursor_position().map(|pos| {
             let mut point = Point::from(pos);
             // Adjust the point to account for horizontal scroll, as cosmic_text does not
@@ -510,14 +510,11 @@ impl TextState {
         if matches!(self.style().vertical_alignment, VerticalTextAlignment::None) {
             return;
         }
-        
+
         let mut scroll = self.buffer.scroll();
         let text_area_size = self.params.size();
-        let vertical_scroll_to_align_text = calculate_vertical_offset(
-            self.params.style(),
-            text_area_size,
-            self.inner_dimensions,
-        );
+        let vertical_scroll_to_align_text =
+            calculate_vertical_offset(self.params.style(), text_area_size, self.inner_dimensions);
         scroll.vertical = vertical_scroll_to_align_text;
         self.buffer.set_scroll(scroll);
     }
@@ -533,15 +530,14 @@ impl TextState {
         let old_scroll = self.buffer.scroll();
 
         if update_reason.is_cursor_updated() {
-            let caret_position_relative_to_buffer =
-                adjust_vertical_scroll_to_make_caret_visible(
-                    &mut self.buffer,
-                    self.cursor,
-                    font_system,
-                    self.params.size(),
-                    self.params.style(),
-                    self.inner_dimensions,
-                )?;
+            let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
+                &mut self.buffer,
+                self.cursor,
+                font_system,
+                self.params.size(),
+                self.params.style(),
+                self.inner_dimensions,
+            )?;
             let mut new_scroll = self.buffer.scroll();
 
             let current_relative_caret_offset = caret_position_relative_to_buffer.x;
@@ -924,6 +920,11 @@ impl UpdateReason {
     }
 
     pub fn is_cursor_updated(&self) -> bool {
-        matches!(self, UpdateReason::MoveCaret | UpdateReason::InsertedText | UpdateReason::DeletedTextAtCursor)
+        matches!(
+            self,
+            UpdateReason::MoveCaret
+                | UpdateReason::InsertedText
+                | UpdateReason::DeletedTextAtCursor
+        )
     }
 }

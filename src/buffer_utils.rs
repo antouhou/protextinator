@@ -2,8 +2,8 @@ use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect, Size};
 use crate::state::calculate_vertical_offset;
 use crate::style::{TextStyle, TextWrap, VerticalTextAlignment};
-use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
 use crate::text_params::TextParams;
+use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
 
 impl From<TextWrap> for cosmic_text::Wrap {
     fn from(value: TextWrap) -> Self {

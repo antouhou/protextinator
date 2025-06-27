@@ -1,8 +1,10 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
-use protextinator::{
-    cosmic_text::FontSystem, Id, Point, Rect, TextManager,
+use protextinator::style::{
+    FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap,
+    VerticalTextAlignment,
 };
+use protextinator::{cosmic_text::FontSystem, Id, Point, Rect, TextManager};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
@@ -11,7 +13,6 @@ use winit::{
     keyboard::{Key, NamedKey},
     window::{Window, WindowId},
 };
-use protextinator::style::{FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap, VerticalTextAlignment};
 
 /// Main application state
 struct App<'a> {
@@ -121,16 +122,14 @@ impl<'a> App<'a> {
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: FontColor(protextinator::cosmic_text::Color::rgb(
-                    0xE5, 0xE5, 0xE5,
-                )), // Light gray
+                font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
                 overflow: None,
                 horizontal_alignment: TextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
                 font_family: FontFamily::SansSerif,
             };
-            
+
             // Create or update the text state
             if !self.text_manager.text_states.contains_key(&text_id) {
                 self.text_manager
@@ -198,9 +197,7 @@ impl<'a> App<'a> {
                 let stats_style = TextStyle {
                     font_size: FontSize(14.0),
                     line_height: LineHeight(1.2),
-                    font_color: FontColor(protextinator::cosmic_text::Color::rgb(
-                        0x61, 0xAF, 0xEF,
-                    )), // Light blue
+                    font_color: FontColor(protextinator::cosmic_text::Color::rgb(0x61, 0xAF, 0xEF)), // Light blue
                     overflow: None,
                     horizontal_alignment: TextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,
@@ -210,8 +207,7 @@ impl<'a> App<'a> {
 
                 // Create or update the stats text state
                 if !self.text_manager.text_states.contains_key(&stats_id) {
-                    self.text_manager
-                        .create_state(stats_id, &stats_text);
+                    self.text_manager.create_state(stats_id, &stats_text);
                 }
 
                 // Get the stats text state and reshape if needed
