@@ -133,7 +133,7 @@ impl<'a> App<'a> {
             // Create or update the text state
             if !self.text_manager.text_states.contains_key(&text_id) {
                 self.text_manager
-                    .create_state(text_id, self.text_content.clone());
+                    .create_state(text_id, self.text_content.clone(), ());
             }
 
             // Get the text state and reshape if needed
@@ -141,7 +141,7 @@ impl<'a> App<'a> {
                 text_state.set_text(&self.text_content);
                 text_state.set_outer_size(&text_rect.size().into());
                 text_state.set_style(&text_style);
-                text_state.set_buffer_id(&text_id);
+                text_state.set_buffer_metadata(text_id.0 as usize);
                 text_state.recalculate(&mut self.text_manager.text_context);
 
                 // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
@@ -207,7 +207,7 @@ impl<'a> App<'a> {
 
                 // Create or update the stats text state
                 if !self.text_manager.text_states.contains_key(&stats_id) {
-                    self.text_manager.create_state(stats_id, &stats_text);
+                    self.text_manager.create_state(stats_id, &stats_text, ());
                 }
 
                 // Get the stats text state and reshape if needed
@@ -215,7 +215,7 @@ impl<'a> App<'a> {
                     stats_text_state.set_text(&stats_text);
                     stats_text_state.set_outer_size(&stats_rect.size().into());
                     stats_text_state.set_style(&stats_style);
-                    stats_text_state.set_buffer_id(&stats_id);
+                    stats_text_state.set_buffer_metadata(stats_id.0 as usize);
                     stats_text_state.recalculate(&mut self.text_manager.text_context);
 
                     // Render stats using add_text_buffer as well
@@ -245,7 +245,7 @@ impl<'a> App<'a> {
                 Err(grafo::wgpu::SurfaceError::OutOfMemory) => {
                     eprintln!("Out of memory!");
                 }
-                Err(e) => eprintln!("Render error: {:?}", e),
+                Err(e) => eprintln!("Render error: {e:?}"),
             }
         }
     }
@@ -328,6 +328,6 @@ fn main() {
 
     let mut app = App::default();
     if let Err(e) = event_loop.run_app(&mut app) {
-        eprintln!("Event loop error: {:?}", e);
+        eprintln!("Event loop error: {e:?}");
     }
 }

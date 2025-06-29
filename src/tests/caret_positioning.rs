@@ -1,13 +1,12 @@
 use crate::tests::mono_style_test;
-use crate::{Action, ActionResult, Id, Point, TextContext, TextState};
+use crate::{Action, ActionResult, Point, TextContext, TextState};
 
 #[test]
 pub fn test() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -52,10 +51,9 @@ pub fn test() {
 #[test]
 pub fn test_cyrillic() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Привет Мир".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -122,10 +120,9 @@ pub fn test_insert_into_empty_text() {
     // Test for the bug: If starting with an empty text and the cursor is at 0,
     // the caret doesn't move when inserting the first character
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "".to_string(); // Empty text
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -167,10 +164,9 @@ pub fn test_delete_at_end_of_text() {
     // Test for the bug: If the caret is at the very end of the string and trying to delete a character,
     // the code panics
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -205,10 +201,9 @@ pub fn test_insert_newline_at_end_of_text() {
     // Test for the bug: If the caret is at the very end of the string and trying to delete a character,
     // the code panics
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;

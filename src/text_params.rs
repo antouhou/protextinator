@@ -1,7 +1,6 @@
 use crate::math::Size;
 use crate::state::SIZE_EPSILON;
 use crate::style::TextStyle;
-use crate::Id;
 use cosmic_text::Metrics;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -9,7 +8,7 @@ pub(crate) struct TextParams {
     size: Size,
     style: TextStyle,
     text: String,
-    buffer_id: Id,
+    metadata: usize,
 
     changed: bool,
     line_terminator_has_been_added: bool,
@@ -17,12 +16,12 @@ pub(crate) struct TextParams {
 
 impl TextParams {
     #[inline(always)]
-    pub fn new(size: Size, style: TextStyle, text: String, buffer_id: Id) -> Self {
+    pub fn new(size: Size, style: TextStyle, text: String, metadata: usize) -> Self {
         let mut params = Self {
             size,
             style,
             text: "".to_string(),
-            buffer_id,
+            metadata,
 
             changed: true,
             line_terminator_has_been_added: false,
@@ -95,8 +94,8 @@ impl TextParams {
     }
 
     #[inline(always)]
-    pub fn buffer_id(&self) -> Id {
-        self.buffer_id
+    pub fn metadata(&self) -> usize {
+        self.metadata
     }
 
     #[inline(always)]
@@ -143,13 +142,14 @@ impl TextParams {
     }
 
     #[inline(always)]
-    pub fn set_buffer_id(&mut self, buffer_id: &Id) {
-        if &self.buffer_id != buffer_id {
-            self.buffer_id = *buffer_id;
+    pub fn set_metadata(&mut self, metadata: usize) {
+        if self.metadata != metadata {
+            self.metadata = metadata;
             self.changed = true;
         }
     }
 
+    #[inline(always)]
     pub fn metrics(&self) -> Metrics {
         Metrics::new(self.style().font_size.0, self.style().line_height_pt())
     }

@@ -110,6 +110,7 @@ pub(crate) fn update_buffer(
     let wrap = text_style.wrap.unwrap_or_default();
     let text_area_size = params.size();
     let font_family = &text_style.font_family;
+    let metadata = params.metadata();
 
     buffer.set_metrics(font_system, params.metrics());
     buffer.set_wrap(font_system, wrap.into());
@@ -125,7 +126,7 @@ pub(crate) fn update_buffer(
         &Attrs::new()
             .color(font_color.into())
             .family(font_family.to_fontdb_family())
-            .metadata(params.buffer_id().0 as usize),
+            .metadata(metadata),
         Shaping::Advanced,
     );
 

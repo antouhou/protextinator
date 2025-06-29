@@ -21,12 +21,12 @@ impl Default for TextContext {
 }
 
 #[derive(Default)]
-pub struct TextManager {
-    pub text_states: HashMap<Id, TextState>,
+pub struct TextManager<TMetadata = ()> {
+    pub text_states: HashMap<Id, TextState<TMetadata>>,
     pub text_context: TextContext,
 }
 
-impl TextManager {
+impl<TMetadata> TextManager<TMetadata> {
     pub fn new() -> Self {
         Self {
             text_states: HashMap::default(),
@@ -42,8 +42,8 @@ impl TextManager {
         self.text_context.load_fonts_from_bytes(fonts);
     }
 
-    pub fn create_state(&mut self, id: Id, text: impl Into<String>) {
-        let state = TextState::new_with_text(text, id, &mut self.text_context.font_system);
+    pub fn create_state(&mut self, id: Id, text: impl Into<String>, metadata: TMetadata) {
+        let state = TextState::new_with_text(text, &mut self.text_context.font_system, metadata);
         self.text_states.insert(id, state);
     }
 
