@@ -1,3 +1,8 @@
+//! Text state management and editing functionality.
+//!
+//! This module provides the core `TextState` type and related functionality for managing
+//! text content, cursor position, selection, scrolling, and text editing operations.
+
 use crate::action::{Action, ActionResult};
 use crate::buffer_utils::{
     adjust_vertical_scroll_to_make_caret_visible, char_under_position, update_buffer,
@@ -15,16 +20,30 @@ use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
 
+/// Size comparison epsilon for floating-point calculations.
 pub const SIZE_EPSILON: f32 = 0.0001;
 
+/// Represents a single line of text selection with visual boundaries.
+///
+/// Selection lines define the visual appearance of selected text, with start and end
+/// coordinates for rendering selection highlights.
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
+    /// X coordinate where the selection starts on this line.
     pub start_x_pt: Option<f32>,
+    /// Y coordinate where the selection starts on this line.
     pub start_y_pt: Option<f32>,
+    /// X coordinate where the selection ends on this line.
     pub end_x_pt: Option<f32>,
+    /// Y coordinate where the selection ends on this line.
     pub end_y_pt: Option<f32>,
 }
 
+/// Represents the current text selection state.
+///
+/// A selection is defined by an origin point (where selection started) and an end point
+/// (where selection currently ends). The selection can span multiple lines, with each
+/// line's visual boundaries stored in the `lines` vector.
 #[derive(Clone, Default, Debug)]
 pub struct Selection {
     origin_character_byte_cursor: Option<ByteCursor>,
@@ -33,18 +52,51 @@ pub struct Selection {
 }
 
 impl Selection {
+    /// Returns `true` if there is no active selection.
+    ///
+    /// A selection is considered empty if either the origin or end cursor is not set.
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::Selection;
+    /// 
+    /// let selection = Selection::default();
+    /// assert!(selection.is_empty());
+    /// ```
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.origin_character_byte_cursor.is_none()
             || self.ends_before_character_byte_cursor.is_none()
     }
 
+    /// Returns the visual selection lines for rendering.
+    ///
+    /// Each line represents a portion of the selection with its visual boundaries.
+    /// This is used by the rendering system to draw selection highlights.
+    ///
+    /// # Returns
+    /// A slice of `SelectionLine` objects representing the visual selection
     #[inline(always)]
     pub fn lines(&self) -> &[SelectionLine] {
         &self.lines
     }
 }
 
+/// The main text state container that manages text content, cursor, selection, and styling.
+///
+/// `TextState` is the core type for text editing functionality. It maintains the text buffer,
+/// cursor position, selection state, scroll position, and handles text editing operations.
+///
+/// # Type Parameters
+/// * `T` - Custom metadata type that can be attached to the text state
+///
+/// # Features
+/// - Text editing (insert, delete, copy, paste, cut)
+/// - Cursor movement and positioning
+/// - Text selection with visual feedback
+/// - Automatic scrolling to keep cursor visible
+/// - Rich text styling
+/// - Configurable editing behavior
 #[derive(Debug)]
 pub struct TextState<T> {
     params: TextParams,
@@ -76,6 +128,30 @@ pub struct TextState<T> {
 }
 
 impl<T> TextState<T> {
+    /// Creates a new text state with the specified text content and metadata.
+    ///
+    /// The text state is created with default settings:
+    /// - Editing and selection disabled
+    /// - Actions disabled
+    /// - Default caret width of 3.0 pixels
+    /// - 50ms scroll interval
+    ///
+    /// # Arguments
+    /// * `text` - The initial text content
+    /// * `font_system` - Mutable reference to the font system for text layout
+    /// * `metadata` - Custom metadata to associate with this text state
+    ///
+    /// # Returns
+    /// A new `TextState` instance
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::{TextState, text_manager::TextContext};
+    /// use cosmic_text::FontSystem;
+    /// 
+    /// let mut font_system = FontSystem::new();
+    /// let state = TextState::new_with_text("Hello, world!", &mut font_system, ());
+    /// ```
     pub fn new_with_text(
         text: impl Into<String>,
         font_system: &mut FontSystem,
@@ -109,28 +185,100 @@ impl<T> TextState<T> {
     }
 
     /// Sets the caret width, which is the width of the cursor when editing text.
+    ///
+    /// # Arguments
+    /// * `width` - The caret width in pixels
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// state.set_caret_width(2.0);
+    /// assert_eq!(state.caret_width(), 2.0);
+    /// ```
     pub fn set_caret_width(&mut self, width: f32) {
         self.caret_width = width;
     }
 
     /// Returns the caret width, which is the width of the cursor when editing text.
+    ///
+    /// # Returns
+    /// The caret width in pixels
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("", &mut font_system, ());
+    /// let width = state.caret_width();
+    /// ```
     pub fn caret_width(&self) -> f32 {
         self.caret_width
     }
 
     /// Caret position relative to the buffer viewport with scroll applied. Returns `None` if
     /// the caret is not visible or the buffer is not shaped yet.
+    ///
+    /// # Returns
+    /// The caret position relative to the viewport, or `None` if not visible
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// if let Some(position) = state.caret_position_relative() {
+    ///     println!("Caret at: ({}, {})", position.x, position.y);
+    /// }
+    /// ```
     pub fn caret_position_relative(&self) -> Option<Point> {
         self.relative_caret_position
     }
 
     /// Returns the position of the selection lines in the buffer viewport.
+    ///
+    /// # Returns
+    /// A reference to the current selection state
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// let selection = state.selection();
+    /// if !selection.is_empty() {
+    ///     println!("Text is selected");
+    /// }
+    /// ```
     pub fn selection(&self) -> &Selection {
         &self.selection
     }
 
     /// Sets the text in the buffer and updates the cursor position if necessary. Also reshapes
     /// the buffer if the text parameters have changed.
+    ///
+    /// This method both updates the text content and triggers a reshape of the text layout,
+    /// ensuring that the visual representation is updated immediately.
+    ///
+    /// # Arguments
+    /// * `text` - The new text content
+    /// * `ctx` - Mutable reference to the text context for reshaping
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// state.set_text_and_reshape("New text content", &mut ctx);
+    /// assert_eq!(state.text(), "New text content");
+    /// ```
     pub fn set_text_and_reshape(&mut self, text: &str, ctx: &mut TextContext) {
         self.params.set_text(text);
 
@@ -142,6 +290,22 @@ impl<T> TextState<T> {
     }
 
     /// Sets the text in the buffer and updates the cursor position if necessary.
+    ///
+    /// This method only updates the text content without reshaping. You'll need to call
+    /// `recalculate` or `reshape_if_params_changed` separately to update the layout.
+    ///
+    /// # Arguments
+    /// * `text` - The new text content
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// state.set_text("Updated text");
+    /// assert_eq!(state.text(), "Updated text");
+    /// ```
     pub fn set_text(&mut self, text: &str) {
         self.params.set_text(text);
 
@@ -153,32 +317,107 @@ impl<T> TextState<T> {
     }
 
     /// Returns the text in the buffer
+    ///
+    /// # Returns
+    /// The current text content as a string slice
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello, world!", &mut font_system, ());
+    /// assert_eq!(state.text(), "Hello, world!");
+    /// ```
     pub fn text(&self) -> &str {
         self.params.original_text()
     }
 
     /// Sets the text style
+    ///
+    /// # Arguments
+    /// * `style` - The new text style to apply
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, style::TextStyle};
+    /// # use cosmic_text::{FontSystem, Color};
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// let style = TextStyle::new(16.0, Color::rgb(255, 0, 0));
+    /// state.set_style(&style);
+    /// ```
     pub fn set_style(&mut self, style: &TextStyle) {
         self.params.set_style(style);
     }
 
     /// Returns the text style
+    ///
+    /// # Returns
+    /// A reference to the current text style
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("", &mut font_system, ());
+    /// let style = state.style();
+    /// println!("Font size: {}", style.font_size.value());
+    /// ```
     pub fn style(&self) -> &TextStyle {
         self.params.style()
     }
 
     /// Sets the visible are of the text buffer
+    ///
+    /// # Arguments
+    /// * `size` - The new visible area size
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, math::Size};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// state.set_outer_size(&Size::new(400.0, 200.0));
+    /// ```
     pub fn set_outer_size(&mut self, size: &Size) {
         self.params.set_size(size)
     }
 
     /// Metadata to set to a text buffer. This can be used to store additional information
+    ///
+    /// # Returns
+    /// The current buffer metadata value
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("", &mut font_system, ());
+    /// let metadata = state.buffer_metadata();
+    /// ```
     pub fn buffer_metadata(&self) -> usize {
         self.params.metadata()
     }
 
-    #[inline(always)]
     /// Sets the metadata for the text buffer. This can be used to store additional information.
+    ///
+    /// # Arguments
+    /// * `metadata` - The metadata value to set
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// state.set_buffer_metadata(42);
+    /// assert_eq!(state.buffer_metadata(), 42);
+    /// ```
+    #[inline(always)]
     pub fn set_buffer_metadata(&mut self, metadata: usize) {
         self.params.set_metadata(metadata)
     }
@@ -186,29 +425,94 @@ impl<T> TextState<T> {
     /// Returns the visible area size of the text buffer. Note that this is set directly by the
     /// `set_outer_size` method, and it does not represent the actual text dimensions. To get the
     /// inner dimensions of the text buffer, use `inner_size`.
+    ///
+    /// # Returns
+    /// The outer size (visible area) of the text buffer
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, math::Size};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
+    /// state.set_outer_size(&Size::new(400.0, 200.0));
+    /// assert_eq!(state.outer_size(), Size::new(400.0, 200.0));
+    /// ```
     pub fn outer_size(&self) -> Size {
         self.params.size()
     }
 
     /// Returns the inner dimensions of the text buffer. This represents the actual size of the text
     /// content, which may differ from the outer size if the text is larger than the visible area.
+    ///
+    /// # Returns
+    /// The inner dimensions representing the actual text content size
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Some text", &mut font_system, ());
+    /// let inner_size = state.inner_size();
+    /// println!("Text content size: {}x{}", inner_size.x, inner_size.y);
+    /// ```
     pub fn inner_size(&self) -> Size {
         self.inner_dimensions
     }
 
     /// Returns the text buffer that can be used for rendering
+    ///
+    /// # Returns
+    /// A reference to the underlying cosmic-text Buffer
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// let buffer = state.buffer();
+    /// // Use buffer for rendering operations
+    /// ```
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
 
     /// Returns the length of the text in characters. Note that this is different from the
     /// string .len(), which returns the length in bytes.
+    ///
+    /// # Returns
+    /// The number of Unicode characters in the text
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello 🦀", &mut font_system, ());
+    /// assert_eq!(state.text_char_len(), 7); // 5 ASCII chars + 1 space + 1 emoji
+    /// ```
     pub fn text_char_len(&self) -> usize {
         self.params.original_text().chars().count()
     }
 
     /// Returns the char index of the cursor in the text buffer. Note that this return the
     /// char index, not the char byte index.
+    ///
+    /// # Returns
+    /// The character index of the cursor, or `None` if the cursor position is invalid
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// if let Some(index) = state.cursor_char_index() {
+    ///     println!("Cursor is at character index: {}", index);
+    /// }
+    /// ```
     pub fn cursor_char_index(&self) -> Option<usize> {
         self.cursor.char_index(self.params.text_for_internal_use())
     }
@@ -318,6 +622,20 @@ impl<T> TextState<T> {
     }
 
     /// Checks if there is a text selection that is not empty.
+    ///
+    /// # Returns
+    /// `true` if text is currently selected, `false` otherwise
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// if state.is_text_selected() {
+    ///     println!("Some text is selected");
+    /// }
+    /// ```
     pub fn is_text_selected(&self) -> bool {
         if let Some(origin) = self.selection.origin_character_byte_cursor {
             if let Some(end) = self.selection.ends_before_character_byte_cursor {
@@ -335,6 +653,20 @@ impl<T> TextState<T> {
         self.selection.lines.clear();
     }
 
+    /// Clears the current text selection.
+    ///
+    /// This removes any active text selection, returning the text state to having
+    /// only a cursor position without any selected text.
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// state.reset_selection();
+    /// assert!(!state.is_text_selected());
+    /// ```
     pub fn reset_selection(&mut self) {
         self.selection.origin_character_byte_cursor = None;
         self.selection.ends_before_character_byte_cursor = None;
@@ -360,6 +692,20 @@ impl<T> TextState<T> {
     /// Returns the selected text as a substring based on the selection start and end byte offsets.
     /// You also can get the selected text by using [`TextState::apply_action`] with
     /// [`Action::CopySelectedText`].
+    ///
+    /// # Returns
+    /// The currently selected text, or `None` if no text is selected
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello, world!", &mut font_system, ());
+    /// if let Some(selected) = state.selected_text() {
+    ///     println!("Selected text: {}", selected);
+    /// }
+    /// ```
     pub fn selected_text(&self) -> Option<&str> {
         if let (Some(mut origin), Some(mut end)) = (
             self.selection.origin_character_byte_cursor,
@@ -375,6 +721,26 @@ impl<T> TextState<T> {
     }
 
     // Buffer must be shaped and updated before calling this function
+    /// Gets the current absolute scroll position of the text buffer.
+    ///
+    /// The scroll position represents how much the text content has been scrolled
+    /// from its original position. This accounts for both horizontal and vertical scrolling.
+    ///
+    /// # Returns
+    /// A `Point` representing the absolute scroll offset
+    ///
+    /// # Note
+    /// The buffer must be shaped and updated before calling this function for accurate results.
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// let scroll = state.absolute_scroll();
+    /// println!("Scrolled by: ({}, {})", scroll.x, scroll.y);
+    /// ```
     pub fn absolute_scroll(&self) -> Point {
         let scroll = self.buffer.scroll();
         let scroll_line = scroll.line;
@@ -400,6 +766,22 @@ impl<T> TextState<T> {
         }
     }
 
+    /// Sets the absolute scroll position of the text buffer.
+    ///
+    /// This allows you to programmatically scroll the text content to a specific position.
+    /// The scroll position is calculated based on line heights and text layout.
+    ///
+    /// # Arguments
+    /// * `scroll` - The absolute scroll position to set
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, math::Point};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello\nWorld\nMore\nText", &mut font_system, ());
+    /// state.set_absolute_scroll(Point::new(0.0, 50.0));
+    /// ```
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
         let mut new_scroll = self.buffer.scroll();
 
@@ -487,6 +869,22 @@ impl<T> TextState<T> {
 
     /// Recalculates and reshapes the text buffer, scroll, caret position and selection area.
     /// The results are cached, so don't be afraid to call this function multiple times.
+    ///
+    /// This is the main method to call after making changes to text content, style, or size
+    /// to ensure the visual representation is updated correctly.
+    ///
+    /// # Arguments
+    /// * `ctx` - Mutable reference to the text context for processing
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// state.recalculate(&mut ctx);
+    /// ```
     pub fn recalculate(&mut self, ctx: &mut TextContext) {
         self.recalculate_with_update_reason(ctx, UpdateReason::Unknown);
     }
@@ -643,6 +1041,23 @@ impl<T> TextState<T> {
         false
     }
 
+    /// Reshapes the text buffer if parameters have changed since the last reshape.
+    ///
+    /// This method checks if any text parameters (content, style, size) have changed
+    /// and only performs the expensive reshape operation if necessary.
+    ///
+    /// # Arguments
+    /// * `ctx` - Mutable reference to the text context for reshaping
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// state.reshape_if_params_changed(&mut ctx);
+    /// ```
     pub fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
@@ -753,6 +1168,35 @@ impl<T> TextState<T> {
         ActionResult::TextChanged
     }
 
+    /// Applies a text editing action and returns the result.
+    ///
+    /// This is the main method for processing text editing operations like inserting text,
+    /// moving the cursor, copying/pasting, etc. The method respects the current text state
+    /// configuration (editable, selectable, actions enabled).
+    ///
+    /// # Arguments
+    /// * `ctx` - Mutable reference to the text context for processing
+    /// * `action` - The action to apply
+    ///
+    /// # Returns
+    /// An `ActionResult` indicating what happened as a result of the action
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext, Action, ActionResult};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// # state.is_editable = true;
+    /// # state.are_actions_enabled = true;
+    /// let result = state.apply_action(&mut ctx, &Action::InsertChar("x".into()));
+    /// match result {
+    ///     ActionResult::TextChanged => println!("Text was modified"),
+    ///     ActionResult::CursorUpdated => println!("Cursor position changed"),
+    ///     _ => {}
+    /// }
+    /// ```
     pub fn apply_action(&mut self, ctx: &mut TextContext, action: &Action) -> ActionResult {
         if !self.are_actions_enabled {
             return ActionResult::ActionsDisabled;
@@ -790,6 +1234,30 @@ impl<T> TextState<T> {
     }
 
     // TODO: make it an action
+    /// Handles a mouse press event on the text area.
+    ///
+    /// This method processes mouse clicks for cursor positioning and selection start.
+    /// It converts the click position to a character position in the text and updates
+    /// the cursor accordingly.
+    ///
+    /// # Arguments
+    /// * `text_context` - Mutable reference to the text context
+    /// * `click_position_relative_to_area` - The click position relative to the text area
+    ///
+    /// # Returns
+    /// `Some(())` if the press was handled, `None` otherwise
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext, math::Point};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// # state.is_selectable = true;
+    /// let click_pos = Point::new(10.0, 5.0);
+    /// state.handle_press(&mut ctx, click_pos);
+    /// ```
     pub fn handle_press(
         &mut self,
         text_context: &mut TextContext,
@@ -812,6 +1280,30 @@ impl<T> TextState<T> {
         None
     }
 
+    /// Handles mouse drag events for text selection.
+    ///
+    /// This method processes mouse drag operations to create and update text selections.
+    /// It includes automatic scrolling when dragging beyond the visible text area.
+    ///
+    /// # Arguments
+    /// * `ctx` - Mutable reference to the text context
+    /// * `is_dragging` - Whether a drag operation is currently in progress
+    /// * `pointer_relative_position` - The current pointer position relative to the text area
+    ///
+    /// # Returns
+    /// `Some(())` if the drag was handled, `None` otherwise
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::{TextState, text_manager::TextContext, math::Point};
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
+    /// # let mut ctx = TextContext::default();
+    /// # state.is_selectable = true;
+    /// let drag_pos = Point::new(50.0, 10.0);
+    /// state.handle_drag(&mut ctx, true, drag_pos);
+    /// ```
     pub fn handle_drag(
         &mut self,
         ctx: &mut TextContext,
@@ -861,7 +1353,18 @@ impl<T> TextState<T> {
 }
 
 /// Takes element height, text buffer height and vertical alignment and returns the vertical offset
-///  needed to align the text vertically.
+/// needed to align the text vertically.
+///
+/// This function calculates the appropriate vertical offset for text alignment based on
+/// the text area size, buffer dimensions, and vertical alignment settings.
+///
+/// # Arguments
+/// * `text_style` - The text style containing alignment information
+/// * `text_area_size` - The size of the text area container
+/// * `buffer_inner_dimensions` - The actual dimensions of the text content
+///
+/// # Returns
+/// The vertical offset needed to achieve the desired alignment
 pub(crate) fn calculate_vertical_offset(
     text_style: &TextStyle,
     text_area_size: Size,
@@ -879,34 +1382,48 @@ pub(crate) fn calculate_vertical_offset(
     0.0 - vertical_offset
 }
 
+/// Describes the reason for a text state update operation.
+///
+/// This enum is used internally to optimize recalculation operations by providing
+/// context about what type of change triggered the update, allowing for more
+/// targeted and efficient updates.
 pub enum UpdateReason {
-    // Cursor changed
+    /// Text content was inserted at the cursor position.
     InsertedText,
+    /// The cursor position was moved.
     MoveCaret,
+    /// Text was deleted at or around the cursor position.
     DeletedTextAtCursor,
-    // Selection changed
+    /// The text selection was modified.
     SelectionChanged,
-    // Unknown reason, can be used for anything that doesn't fit the above
+    /// The reason for the update is unknown or doesn't fit other categories.
     Unknown,
 }
 
 impl UpdateReason {
+    /// Returns `true` if this update reason indicates a selection change.
     pub fn is_selection_changed(&self) -> bool {
         matches!(self, UpdateReason::SelectionChanged)
     }
 
+    /// Returns `true` if this update reason indicates text was inserted.
     pub fn is_inserted_text(&self) -> bool {
         matches!(self, UpdateReason::InsertedText)
     }
 
+    /// Returns `true` if this update reason indicates the cursor was moved.
     pub fn is_move_caret(&self) -> bool {
         matches!(self, UpdateReason::MoveCaret)
     }
 
+    /// Returns `true` if this update reason indicates text was deleted.
     pub fn is_deleted_text_at_cursor(&self) -> bool {
         matches!(self, UpdateReason::DeletedTextAtCursor)
     }
 
+    /// Returns `true` if this update reason indicates any cursor-related change.
+    ///
+    /// This includes cursor movement, text insertion, and text deletion operations.
     pub fn is_cursor_updated(&self) -> bool {
         matches!(
             self,
