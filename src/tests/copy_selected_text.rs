@@ -1,13 +1,12 @@
 use crate::tests::mono_style_test;
-use crate::{Action, ActionResult, Id, Point, TextContext, TextState};
+use crate::{Action, ActionResult, Point, TextContext, TextState};
 
 #[test]
 pub fn test_copy_empty_selection() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
 
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
@@ -30,10 +29,9 @@ pub fn test_copy_empty_selection() {
 #[test]
 pub fn test_copy_partial_selection() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -59,10 +57,9 @@ pub fn test_copy_partial_selection() {
 #[test]
 pub fn test_copy_full_selection() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -88,10 +85,9 @@ pub fn test_copy_full_selection() {
 #[test]
 pub fn test_copy_cyrillic_text() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Привет Мир".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
     text_state.is_editable = true;
@@ -117,10 +113,9 @@ pub fn test_copy_cyrillic_text() {
 #[test]
 pub fn test_copy_after_editing() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "Hello World".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((200.0, 25.0)));
 
@@ -151,10 +146,9 @@ pub fn test_copy_after_editing() {
 #[test]
 pub fn test_copy_selection_from_middle() {
     let mut ctx = TextContext::default();
-    let text_id = Id::new(0);
     let initial_text = "The quick brown fox jumps over the lazy dog".to_string();
 
-    let mut text_state = TextState::new_with_text(initial_text, text_id, &mut ctx.font_system);
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Point::from((400.0, 25.0)));
     text_state.is_editable = true;

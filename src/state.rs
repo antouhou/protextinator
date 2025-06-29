@@ -8,7 +8,7 @@ use crate::math::Size;
 use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
-use crate::{Id, Point, Rect};
+use crate::{Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
@@ -45,7 +45,8 @@ impl Selection {
     }
 }
 
-pub struct TextState {
+#[derive(Debug)]
+pub struct TextState<T> {
     params: TextParams,
     cursor: ByteCursor,
     // Caret position relative to the buffer viewport with scroll applied
@@ -69,16 +70,19 @@ pub struct TextState {
     pub are_actions_enabled: bool,
     /// Interval between scroll updates when dragging the selection
     pub scroll_interval: Duration,
+
+    /// Doesn't affect anything - just some metadata that you can later use during rendering
+    pub metadata: T,
 }
 
-impl TextState {
+impl<T> TextState<T> {
     pub fn new_with_text(
         text: impl Into<String>,
-        text_buffer_id: Id,
         font_system: &mut FontSystem,
+        metadata: T,
     ) -> Self {
         let text = text.into();
-        let params = TextParams::new(Size::ZERO, TextStyle::default(), text, text_buffer_id);
+        let params = TextParams::new(Size::ZERO, TextStyle::default(), text, 0);
         let metrics = params.metrics();
 
         Self {
@@ -99,6 +103,8 @@ impl TextState {
 
             inner_dimensions: Size::ZERO,
             buffer: Buffer::new(font_system, metrics),
+
+            metadata,
         }
     }
 
@@ -166,6 +172,17 @@ impl TextState {
         self.params.set_size(size)
     }
 
+    /// Metadata to set to a text buffer. This can be used to store additional information
+    pub fn buffer_metadata(&self) -> usize {
+        self.params.metadata()
+    }
+
+    #[inline(always)]
+    /// Sets the metadata for the text buffer. This can be used to store additional information.
+    pub fn set_buffer_metadata(&mut self, metadata: usize) {
+        self.params.set_metadata(metadata)
+    }
+
     /// Returns the visible area size of the text buffer. Note that this is set directly by the
     /// `set_outer_size` method, and it does not represent the actual text dimensions. To get the
     /// inner dimensions of the text buffer, use `inner_size`.
@@ -177,16 +194,6 @@ impl TextState {
     /// content, which may differ from the outer size if the text is larger than the visible area.
     pub fn inner_size(&self) -> Size {
         self.inner_dimensions
-    }
-
-    // TODO: right now buffer id is used in grafo rendering to identify the depth - need to fix that
-    pub fn set_buffer_id(&mut self, buffer_id: &Id) {
-        self.params.set_buffer_id(buffer_id);
-    }
-
-    // TODO: right now buffer id is used in grafo rendering to identify the depth - need to fix that
-    pub fn buffer_id(&self) -> Id {
-        self.params.buffer_id()
     }
 
     /// Returns the text buffer that can be used for rendering
@@ -636,7 +643,7 @@ impl TextState {
         false
     }
 
-    fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
+    pub fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
             let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
