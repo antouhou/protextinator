@@ -16,7 +16,7 @@
 //!
 //! ```rust
 //! use protextinator::{TextManager, TextState, math::Size};
-//! use cosmic_text::Color;
+//! use cosmic_text::{fontdb, Color};
 //! use protextinator::style::TextStyle;
 //!
 //! // Create a text manager
@@ -27,10 +27,12 @@
 //! let text = "Hello, world!";
 //! text_manager.create_state(id, text, ());
 //! // Add fonts
-//! text_manager.load_fonts(&[]);
+//! let font_sources: Vec<fontdb::Source> = vec![];
+//! text_manager.load_fonts(font_sources.into_iter());
 //! // Alternatively, you can load fonts from bytes if you want to embed them into the binary
 //! // or download them at runtime as bytes
-//! text_manager.load_fonts_from_bytes(&[]);
+//! let byte_sources: Vec<&'static [u8]> = vec![];
+//! text_manager.load_fonts_from_bytes(byte_sources.into_iter());
 //!
 //! // Optional: Marks the beginning of a frame so that you can track which text states are accessed
 //! text_manager.start_frame();

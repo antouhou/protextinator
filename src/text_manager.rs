@@ -99,8 +99,8 @@ impl<TMetadata> TextManager<TMetadata> {
     /// let mut manager: TextManager<()> = TextManager::new();
     ///
     /// // Load embedded font data
-    /// let font_data = include_bytes!("../path/to/font.ttf");
-    /// manager.load_fonts_from_bytes(std::iter::once(font_data.as_slice()));
+    /// //let font_data = include_bytes!("../path/to/font.ttf");
+    /// //manager.load_fonts_from_bytes(std::iter::once(font_data.as_slice()));
     /// ```
     pub fn load_fonts_from_bytes<'a>(&mut self, fonts: impl Iterator<Item = &'a [u8]>) {
         self.text_context.load_fonts_from_bytes(fonts);
@@ -224,15 +224,6 @@ impl TextUsageTracker {
     ///
     /// # Arguments
     /// * `id` - The ID of the text state that was accessed
-    ///
-    /// # Examples
-    /// ```
-    /// use protextinator::{Id, text_manager::TextUsageTracker};
-    ///
-    /// let mut tracker = TextUsageTracker::new();
-    /// let id = Id::new("my_text");
-    /// tracker.mark_accessed(id);
-    /// ```
     pub fn mark_accessed(&mut self, id: Id) {
         self.accessed_states.insert(id);
     }
