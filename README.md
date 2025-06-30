@@ -1,9 +1,9 @@
 # 🚀 Protextinator
 
 <div align="center">
-  <img src="https://img.shields.io/crates/v/protextinator.svg" alt="Crates.io">
-  <img src="https://img.shields.io/docsrs/protextinator" alt="Docs.rs">
-  <img src="https://img.shields.io/crates/l/protextinator" alt="License">
+  <a href="https://crates.io/crates/protextinator"><img src="https://img.shields.io/crates/v/protextinator.svg" alt="Crates.io"></a>
+  <a href="https://docs.rs/protextinator/latest/protextinator/"><img src="https://img.shields.io/docsrs/protextinator" alt="Docs.rs"></a>
+  <a href="https://github.com/antouhou/protextinator/blob/main/LICENSE.md"><img src="https://img.shields.io/crates/l/protextinator" alt="License"></a>
 </div>
 
 ## ✨ Text Management, Made Simple!
