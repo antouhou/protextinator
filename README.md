@@ -1,9 +1,9 @@
 # 🚀 Protextinator
 
 <div align="center">
-  <img src="https://img.shields.io/crates/v/protextinator.svg" alt="Crates.io">
-  <img src="https://img.shields.io/docsrs/protextinator" alt="Docs.rs">
-  <img src="https://img.shields.io/crates/l/protextinator" alt="License">
+  <a href="https://crates.io/crates/protextinator"><img src="https://img.shields.io/crates/v/protextinator.svg" alt="Crates.io"></a>
+  <a href="https://docs.rs/protextinator/latest/protextinator/"><img src="https://img.shields.io/docsrs/protextinator" alt="Docs.rs"></a>
+  <a href="https://github.com/antouhou/protextinator/blob/main/LICENSE_MIT"><img src="https://img.shields.io/crates/l/protextinator" alt="License"></a>
 </div>
 
 ## ✨ Text Management, Made Simple!
@@ -57,7 +57,7 @@ Protextinator makes it easy to:
 
 ## 🎮 Integration Example
 
-Protextinator works great with rendering libraries like [Grafo](https://github.com/pop-os/grafo) and windowing libraries like [Winit](https://github.com/rust-windowing/winit). Check out the examples directory for a complete integration example.
+Protextinator works great with rendering libraries like [Grafo](https://github.com/antouhou/grafo) and windowing libraries like [Winit](https://github.com/rust-windowing/winit). Check out the examples directory for a complete integration example.
 
 ## 📚 API Overview
 
@@ -75,7 +75,7 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 
 Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE_MIT) or http://opensource.org/licenses/MIT)
 
 at your option.

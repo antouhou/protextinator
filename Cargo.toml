@@ -1,6 +1,6 @@
 [package]
 name = "protextinator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Text management, made simple"
 keywords = ["text", "rendering", "gui", "graphics", "image"]
