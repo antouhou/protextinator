@@ -1,7 +1,7 @@
 use futures::executor::block_on;
 use grafo::{Color, MathRect, Renderer, Shape, Stroke};
 use protextinator::style::{
-    FontColor, FontFamily, FontSize, LineHeight, TextAlignment, TextStyle, TextWrap,
+    FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
     VerticalTextAlignment,
 };
 use protextinator::{cosmic_text::FontSystem, Id, Point, Rect, TextManager};
@@ -123,8 +123,7 @@ impl<'a> App<'a> {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
                 font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
-                overflow: None,
-                horizontal_alignment: TextAlignment::Start,
+                horizontal_alignment: HorizontalTextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
                 font_family: FontFamily::SansSerif,
@@ -198,8 +197,7 @@ impl<'a> App<'a> {
                     font_size: FontSize(14.0),
                     line_height: LineHeight(1.2),
                     font_color: FontColor(protextinator::cosmic_text::Color::rgb(0x61, 0xAF, 0xEF)), // Light blue
-                    overflow: None,
-                    horizontal_alignment: TextAlignment::Start,
+                    horizontal_alignment: HorizontalTextAlignment::Start,
                     vertical_alignment: VerticalTextAlignment::Start,
                     wrap: Some(TextWrap::Wrap),
                     font_family: FontFamily::Serif,
