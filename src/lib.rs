@@ -1,24 +1,16 @@
 //! # Protextinator
 //!
-//! A high-performance text editing and rendering library built on top of [`cosmic_text`].
-//! Protextinator provides text state management, cursor handling, text selection, 
-//! and various text editing operations with support for rich text styling.
-//!
-//! ## Features
-//!
-//! - **Text State Management**: Efficient text buffer management with cursor positioning
-//! - **Text Selection**: Support for text selection with visual feedback
-//! - **Text Editing**: Insert, delete, copy, paste, and other text editing operations
-//! - **Rich Styling**: Comprehensive text styling with fonts, colors, alignment, and more
-//! - **Scrolling**: Automatic scroll management to keep cursor visible
-//! - **Font Management**: Easy font loading and management
-//! - **Serialization**: Optional serialization support for text styles
+//! Text editing and rendering library built on top of [`cosmic_text`], that provides a simpler
+//! API with some additional features, like measuring text buffer size, a simple interface for
+//! loading and managing fonts, a collection of text states that has optional track of usage for
+//! garbage collection, custom metadata for text states, and more.
 //!
 //! ## Basic Usage
 //!
 //! ```rust
-//! use protextinator::{TextManager, TextState, TextStyle, math::Size};
+//! use protextinator::{TextManager, TextState, math::Size};
 //! use cosmic_text::Color;
+//! use protextinator::style::TextStyle;
 //!
 //! // Create a text manager
 //! let mut text_manager = TextManager::new();
@@ -43,6 +35,9 @@
 //!     
 //!     // Recalculate layout
 //!     state.recalculate(&mut text_manager.text_context);
+//! 
+//!     // Get the inner size of the buffer - i.e., how much space the text needs to occupy
+//!     let inner_size = state.inner_size();
 //! }
 //! ```
 
