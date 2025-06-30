@@ -12,6 +12,8 @@
 
 > 💡 Perfect for game UIs, text editors, and any application that needs sophisticated text rendering with minimal hassle.
 
+⚠️ **WARNING**:  This library is work in progress, use at your own risk! ⚠️
+
 ## 🔥 Features
 
 - **Vertical text alignment** - Position your text exactly where you want it
