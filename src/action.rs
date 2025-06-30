@@ -62,10 +62,10 @@ impl ActionResult {
     /// # Examples
     /// ```
     /// use protextinator::ActionResult;
-    /// 
+    ///
     /// let result = ActionResult::None;
     /// assert!(result.is_none());
-    /// 
+    ///
     /// let result = ActionResult::TextChanged;
     /// assert!(!result.is_none());
     /// ```

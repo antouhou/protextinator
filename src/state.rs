@@ -59,7 +59,7 @@ impl Selection {
     /// # Examples
     /// ```
     /// use protextinator::Selection;
-    /// 
+    ///
     /// let selection = Selection::default();
     /// assert!(selection.is_empty());
     /// ```
@@ -72,7 +72,6 @@ impl Selection {
     /// Returns the visual selection lines for rendering.
     ///
     /// Each line represents a portion of the selection with its visual boundaries.
-    /// This is used by the rendering system to draw selection highlights.
     ///
     /// # Returns
     /// A slice of `SelectionLine` objects representing the visual selection
@@ -146,9 +145,9 @@ impl<T> TextState<T> {
     ///
     /// # Examples
     /// ```
-    /// use protextinator::{TextState, text_manager::TextContext};
+    /// use protextinator::{TextState, TextContext};
     /// use cosmic_text::FontSystem;
-    /// 
+    ///
     /// let mut font_system = FontSystem::new();
     /// let state = TextState::new_with_text("Hello, world!", &mut font_system, ());
     /// ```
@@ -259,36 +258,6 @@ impl<T> TextState<T> {
         &self.selection
     }
 
-    /// Sets the text in the buffer and updates the cursor position if necessary. Also reshapes
-    /// the buffer if the text parameters have changed.
-    ///
-    /// This method both updates the text content and triggers a reshape of the text layout,
-    /// ensuring that the visual representation is updated immediately.
-    ///
-    /// # Arguments
-    /// * `text` - The new text content
-    /// * `ctx` - Mutable reference to the text context for reshaping
-    ///
-    /// # Examples
-    /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext};
-    /// # use cosmic_text::FontSystem;
-    /// # let mut font_system = FontSystem::new();
-    /// # let mut state = TextState::new_with_text("", &mut font_system, ());
-    /// # let mut ctx = TextContext::default();
-    /// state.set_text_and_reshape("New text content", &mut ctx);
-    /// assert_eq!(state.text(), "New text content");
-    /// ```
-    pub fn set_text_and_reshape(&mut self, text: &str, ctx: &mut TextContext) {
-        self.params.set_text(text);
-
-        self.reshape_if_params_changed(ctx);
-
-        if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
-            self.move_cursor(ctx, Motion::BufferEnd);
-        }
-    }
-
     /// Sets the text in the buffer and updates the cursor position if necessary.
     ///
     /// This method only updates the text content without reshaping. You'll need to call
@@ -369,7 +338,8 @@ impl<T> TextState<T> {
         self.params.style()
     }
 
-    /// Sets the visible are of the text buffer
+    /// Sets the visible area of the text buffer. This is going to be used to determine the buffer's
+    /// viewport size and how much text is visible.
     ///
     /// # Arguments
     /// * `size` - The new visible area size
@@ -386,7 +356,7 @@ impl<T> TextState<T> {
         self.params.set_size(size)
     }
 
-    /// Metadata to set to a text buffer. This can be used to store additional information
+    /// Metadata set to a cosmic_text's buffer
     ///
     /// # Returns
     /// The current buffer metadata value
@@ -403,7 +373,8 @@ impl<T> TextState<T> {
         self.params.metadata()
     }
 
-    /// Sets the metadata for the text buffer. This can be used to store additional information.
+    /// Sets the metadata for the text cosmic_text's buffer. Note that this is different from
+    /// the `metadata` field in `TextState`, which is a custom type.
     ///
     /// # Arguments
     /// * `metadata` - The metadata value to set
@@ -497,7 +468,7 @@ impl<T> TextState<T> {
         self.params.original_text().chars().count()
     }
 
-    /// Returns the char index of the cursor in the text buffer. Note that this return the
+    /// Returns the char index of the cursor in the text buffer. Note that this returns the
     /// char index, not the char byte index.
     ///
     /// # Returns
@@ -720,8 +691,10 @@ impl<T> TextState<T> {
         }
     }
 
-    // Buffer must be shaped and updated before calling this function
-    /// Gets the current absolute scroll position of the text buffer.
+    //
+    /// Gets the current absolute scroll position of the text buffer. Note that
+    /// the buffer must be shaped and updated before calling this function, i.e. if anything
+    /// changed in the text, you should call [`TextState::recalculate`].
     ///
     /// The scroll position represents how much the text content has been scrolled
     /// from its original position. This accounts for both horizontal and vertical scrolling.
@@ -867,7 +840,7 @@ impl<T> TextState<T> {
         self.align_vertically();
     }
 
-    /// Recalculates and reshapes the text buffer, scroll, caret position and selection area.
+    /// Recalculates and reshapes the text buffer, scroll, caret position, and selection area.
     /// The results are cached, so don't be afraid to call this function multiple times.
     ///
     /// This is the main method to call after making changes to text content, style, or size
@@ -878,7 +851,7 @@ impl<T> TextState<T> {
     ///
     /// # Examples
     /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext};
+    /// # use protextinator::{TextState, TextContext};
     /// # use cosmic_text::FontSystem;
     /// # let mut font_system = FontSystem::new();
     /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
@@ -1045,20 +1018,7 @@ impl<T> TextState<T> {
     ///
     /// This method checks if any text parameters (content, style, size) have changed
     /// and only performs the expensive reshape operation if necessary.
-    ///
-    /// # Arguments
-    /// * `ctx` - Mutable reference to the text context for reshaping
-    ///
-    /// # Examples
-    /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext};
-    /// # use cosmic_text::FontSystem;
-    /// # let mut font_system = FontSystem::new();
-    /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
-    /// # let mut ctx = TextContext::default();
-    /// state.reshape_if_params_changed(&mut ctx);
-    /// ```
-    pub fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
+    fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
             let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
@@ -1183,7 +1143,7 @@ impl<T> TextState<T> {
     ///
     /// # Examples
     /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext, Action, ActionResult};
+    /// # use protextinator::{TextState, TextContext, Action, ActionResult};
     /// # use cosmic_text::FontSystem;
     /// # let mut font_system = FontSystem::new();
     /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
@@ -1249,7 +1209,7 @@ impl<T> TextState<T> {
     ///
     /// # Examples
     /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext, math::Point};
+    /// # use protextinator::{TextState, TextContext, math::Point};
     /// # use cosmic_text::FontSystem;
     /// # let mut font_system = FontSystem::new();
     /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
@@ -1295,7 +1255,7 @@ impl<T> TextState<T> {
     ///
     /// # Examples
     /// ```
-    /// # use protextinator::{TextState, text_manager::TextContext, math::Point};
+    /// # use protextinator::{TextState, TextContext, math::Point};
     /// # use cosmic_text::FontSystem;
     /// # let mut font_system = FontSystem::new();
     /// # let mut state = TextState::new_with_text("Hello", &mut font_system, ());
@@ -1352,7 +1312,7 @@ impl<T> TextState<T> {
     }
 }
 
-/// Takes element height, text buffer height and vertical alignment and returns the vertical offset
+/// Takes element height, text buffer height, and vertical alignment and returns the vertical offset
 /// needed to align the text vertically.
 ///
 /// This function calculates the appropriate vertical offset for text alignment based on

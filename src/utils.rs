@@ -28,7 +28,7 @@ impl From<&'static str> for ArcCowStr {
     /// # Examples
     /// ```
     /// use protextinator::utils::ArcCowStr;
-    /// 
+    ///
     /// let arc_str: ArcCowStr = "hello world".into();
     /// assert_eq!(&*arc_str, "hello world");
     /// ```
@@ -45,7 +45,7 @@ impl From<String> for ArcCowStr {
     /// # Examples
     /// ```
     /// use protextinator::utils::ArcCowStr;
-    /// 
+    ///
     /// let owned_string = String::from("hello world");
     /// let arc_str: ArcCowStr = owned_string.into();
     /// assert_eq!(&*arc_str, "hello world");
@@ -57,7 +57,7 @@ impl From<String> for ArcCowStr {
 
 impl Deref for ArcCowStr {
     type Target = str;
-    
+
     /// Dereferences to the underlying string slice.
     ///
     /// This allows `ArcCowStr` to be used wherever a `&str` is expected.

@@ -55,7 +55,7 @@ impl<TMetadata> TextManager<TMetadata> {
     /// # Examples
     /// ```
     /// use protextinator::TextManager;
-    /// 
+    ///
     /// let mut manager: TextManager<()> = TextManager::new();
     /// ```
     pub fn new() -> Self {
@@ -74,9 +74,9 @@ impl<TMetadata> TextManager<TMetadata> {
     /// ```
     /// use protextinator::TextManager;
     /// use cosmic_text::fontdb;
-    /// 
+    ///
     /// let mut manager: TextManager<()> = TextManager::new();
-    /// 
+    ///
     /// // Load system fonts (example)
     /// let sources = std::iter::empty(); // In practice, use actual font sources
     /// manager.load_fonts(sources);
@@ -95,9 +95,9 @@ impl<TMetadata> TextManager<TMetadata> {
     /// # Examples
     /// ```
     /// use protextinator::TextManager;
-    /// 
+    ///
     /// let mut manager: TextManager<()> = TextManager::new();
-    /// 
+    ///
     /// // Load embedded font data
     /// let font_data = include_bytes!("../path/to/font.ttf");
     /// manager.load_fonts_from_bytes(std::iter::once(font_data.as_slice()));
@@ -116,10 +116,10 @@ impl<TMetadata> TextManager<TMetadata> {
     /// # Examples
     /// ```
     /// use protextinator::{TextManager, Id};
-    /// 
+    ///
     /// let mut manager: TextManager<&str> = TextManager::new();
     /// let id = Id::new("my_text");
-    /// 
+    ///
     /// manager.create_state(id, "Hello, world!", "label_text");
     /// ```
     pub fn create_state(&mut self, id: Id, text: impl Into<String>, metadata: TMetadata) {
@@ -136,9 +136,9 @@ impl<TMetadata> TextManager<TMetadata> {
     /// # Examples
     /// ```
     /// use protextinator::TextManager;
-    /// 
+    ///
     /// let mut manager: TextManager<()> = TextManager::new();
-    /// 
+    ///
     /// // At the start of each frame
     /// manager.start_frame();
     /// ```
@@ -155,9 +155,9 @@ impl<TMetadata> TextManager<TMetadata> {
     /// # Examples
     /// ```
     /// use protextinator::TextManager;
-    /// 
+    ///
     /// let mut manager: TextManager<()> = TextManager::new();
-    /// 
+    ///
     /// // At the end of each frame
     /// manager.end_frame();
     /// ```
@@ -228,7 +228,7 @@ impl TextUsageTracker {
     /// # Examples
     /// ```
     /// use protextinator::{Id, text_manager::TextUsageTracker};
-    /// 
+    ///
     /// let mut tracker = TextUsageTracker::new();
     /// let id = Id::new("my_text");
     /// tracker.mark_accessed(id);

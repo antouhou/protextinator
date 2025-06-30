@@ -9,14 +9,6 @@ use cosmic_text::{Align, Color, Family};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
 
-/// Defines how text should behave when it overflows its container.
-#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TextOverflow {
-    /// Clip the overflowing text (default behavior).
-    Clip,
-}
-
 /// Defines how text should wrap within its container.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -57,7 +49,7 @@ impl From<f32> for LineHeight {
     /// # Examples
     /// ```
     /// use protextinator::style::LineHeight;
-    /// 
+    ///
     /// let line_height: LineHeight = 1.2.into();
     /// assert_eq!(line_height.0, 1.2);
     /// ```
@@ -85,7 +77,7 @@ impl FontSize {
     /// # Examples
     /// ```
     /// use protextinator::style::FontSize;
-    /// 
+    ///
     /// let font_size = FontSize::new(16.0);
     /// assert_eq!(font_size.value(), 16.0);
     /// ```
@@ -98,7 +90,7 @@ impl FontSize {
     /// # Examples
     /// ```
     /// use protextinator::style::FontSize;
-    /// 
+    ///
     /// let font_size = FontSize::new(14.0);
     /// assert_eq!(font_size.value(), 14.0);
     /// ```
@@ -109,7 +101,7 @@ impl FontSize {
 
 impl Default for FontSize {
     /// Returns a default font size of 1.5 points.
-    /// 
+    ///
     /// Note: This is likely a placeholder value. Consider using a more standard
     /// default like 12.0 or 16.0 points for typical text.
     fn default() -> Self {
@@ -129,7 +121,7 @@ impl From<f32> for FontSize {
     /// # Examples
     /// ```
     /// use protextinator::style::FontSize;
-    /// 
+    ///
     /// let font_size: FontSize = 18.0.into();
     /// assert_eq!(font_size.value(), 18.0);
     /// ```
@@ -177,7 +169,7 @@ impl FontColor {
     /// ```
     /// use protextinator::style::FontColor;
     /// use cosmic_text::Color;
-    /// 
+    ///
     /// let color = FontColor::new(Color::rgb(255, 0, 0));
     /// ```
     pub fn new(color: Color) -> Self {
@@ -194,7 +186,7 @@ impl FontColor {
     /// # Examples
     /// ```
     /// use protextinator::style::FontColor;
-    /// 
+    ///
     /// let red = FontColor::rgb(255, 0, 0);
     /// let green = FontColor::rgb(0, 255, 0);
     /// let blue = FontColor::rgb(0, 0, 255);
@@ -214,7 +206,7 @@ impl FontColor {
     /// # Examples
     /// ```
     /// use protextinator::style::FontColor;
-    /// 
+    ///
     /// let semi_transparent_red = FontColor::rgba(255, 0, 0, 128);
     /// let opaque_blue = FontColor::rgba(0, 0, 255, 255);
     /// ```
@@ -242,7 +234,8 @@ impl From<FontColor> for Color {
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FontFamily {
-    /// A specific named font family.
+    /// A specific named font family. Have to be loaded into the font system with
+    /// [`crate::TextManager::load_fonts`].
     Name(ArcCowStr),
     /// Generic sans-serif font family (e.g., Arial, Helvetica).
     SansSerif,
@@ -272,12 +265,13 @@ impl FontFamily {
     /// Creates a new named font family.
     ///
     /// # Arguments
-    /// * `family` - The font family name
+    /// * `family` - The font family name. For custom fonts, the font must be loaded into the font
+    ///   system using [`crate::TextManager::load_fonts`].
     ///
     /// # Examples
     /// ```
     /// use protextinator::style::FontFamily;
-    /// 
+    ///
     /// let arial = FontFamily::new("Arial");
     /// let custom_font = FontFamily::new("MyCustomFont".to_string());
     /// ```
@@ -290,7 +284,7 @@ impl FontFamily {
     /// # Examples
     /// ```
     /// use protextinator::style::FontFamily;
-    /// 
+    ///
     /// let sans_serif = FontFamily::sans_serif();
     /// ```
     pub fn sans_serif() -> Self {
@@ -302,7 +296,7 @@ impl FontFamily {
     /// # Examples
     /// ```
     /// use protextinator::style::FontFamily;
-    /// 
+    ///
     /// let serif = FontFamily::serif();
     /// ```
     pub fn serif() -> Self {
@@ -314,7 +308,7 @@ impl FontFamily {
     /// # Examples
     /// ```
     /// use protextinator::style::FontFamily;
-    /// 
+    ///
     /// let monospace = FontFamily::monospace();
     /// ```
     pub fn monospace() -> Self {
@@ -338,8 +332,8 @@ impl FontFamily {
 
 /// Comprehensive text styling configuration.
 ///
-/// `TextStyle` combines all visual aspects of text rendering including font properties,
-/// colors, alignment, wrapping behavior, and overflow handling.
+/// `TextStyle` combines all visual aspects of text rendering, including font properties,
+/// colors, alignment and wrapping behavior
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextStyle {
@@ -349,10 +343,8 @@ pub struct TextStyle {
     pub line_height: LineHeight,
     /// The color of the text.
     pub font_color: FontColor,
-    /// How to handle text that overflows its container.
-    pub overflow: Option<TextOverflow>,
     /// Horizontal text alignment within the container.
-    pub horizontal_alignment: TextAlignment,
+    pub horizontal_alignment: HorizontalTextAlignment,
     /// Vertical text alignment within the container.
     pub vertical_alignment: VerticalTextAlignment,
     /// Text wrapping behavior.
@@ -364,7 +356,7 @@ pub struct TextStyle {
 /// Horizontal text alignment options.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default)]
-pub enum TextAlignment {
+pub enum HorizontalTextAlignment {
     /// Align text to the start of the container (left in LTR, right in RTL).
     #[default]
     Start,
@@ -380,19 +372,19 @@ pub enum TextAlignment {
     Justify,
 }
 
-impl From<TextAlignment> for Option<Align> {
+impl From<HorizontalTextAlignment> for Option<Align> {
     /// Converts a `TextAlignment` to a [`cosmic_text::Align`] option.
     ///
     /// Returns `None` for `Start` alignment (default behavior), and the corresponding
     /// `Align` variant for other alignment types.
-    fn from(val: TextAlignment) -> Self {
+    fn from(val: HorizontalTextAlignment) -> Self {
         match val {
-            TextAlignment::Start => None,
-            TextAlignment::End => Some(Align::End),
-            TextAlignment::Center => Some(Align::Center),
-            TextAlignment::Left => Some(Align::Left),
-            TextAlignment::Right => Some(Align::Right),
-            TextAlignment::Justify => Some(Align::Justified),
+            HorizontalTextAlignment::Start => None,
+            HorizontalTextAlignment::End => Some(Align::End),
+            HorizontalTextAlignment::Center => Some(Align::Center),
+            HorizontalTextAlignment::Left => Some(Align::Left),
+            HorizontalTextAlignment::Right => Some(Align::Right),
+            HorizontalTextAlignment::Justify => Some(Align::Justified),
         }
     }
 }
@@ -417,7 +409,6 @@ impl Hash for TextStyle {
         self.font_size.hash(state);
         self.line_height.hash(state);
         self.font_color.hash(state);
-        self.overflow.hash(state);
         self.horizontal_alignment.hash(state);
         self.vertical_alignment.hash(state);
         self.wrap.hash(state);
@@ -441,8 +432,7 @@ impl Default for TextStyle {
             font_size: FontSize(16.0),
             line_height: LineHeight::default(),
             font_color: FontColor(Color::rgb(255, 255, 255)),
-            overflow: None,
-            horizontal_alignment: TextAlignment::Start,
+            horizontal_alignment: HorizontalTextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
             wrap: None,
             font_family: FontFamily::SansSerif,
@@ -463,7 +453,7 @@ impl TextStyle {
     /// ```
     /// use protextinator::style::TextStyle;
     /// use cosmic_text::Color;
-    /// 
+    ///
     /// let style = TextStyle::new(14.0, Color::rgb(0, 0, 0));
     /// ```
     pub fn new(font_size: f32, font_color: Color) -> Self {
@@ -471,8 +461,7 @@ impl TextStyle {
             font_size: font_size.into(),
             line_height: LineHeight::default(),
             font_color: FontColor(font_color),
-            overflow: None,
-            horizontal_alignment: TextAlignment::Start,
+            horizontal_alignment: HorizontalTextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
             wrap: None,
             font_family: FontFamily::SansSerif,
@@ -487,7 +476,7 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::TextStyle;
-    /// 
+    ///
     /// let style = TextStyle::default().with_font_size(18.0);
     /// ```
     pub fn with_font_size(mut self, font_size: f32) -> Self {
@@ -503,27 +492,11 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::TextStyle;
-    /// 
+    ///
     /// let style = TextStyle::default().with_line_height(1.2);
     /// ```
     pub fn with_line_height(mut self, line_height: f32) -> Self {
         self.line_height = line_height.into();
-        self
-    }
-
-    /// Sets the text overflow behavior and returns the modified style.
-    ///
-    /// # Arguments
-    /// * `overflow` - The overflow behavior
-    ///
-    /// # Examples
-    /// ```
-    /// use protextinator::style::{TextStyle, TextOverflow};
-    /// 
-    /// let style = TextStyle::default().with_overflow(TextOverflow::Clip);
-    /// ```
-    pub fn with_overflow(mut self, overflow: TextOverflow) -> Self {
-        self.overflow = Some(overflow);
         self
     }
 
@@ -535,7 +508,7 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::{TextStyle, FontColor};
-    /// 
+    ///
     /// let style = TextStyle::default().with_font_color(FontColor::rgb(255, 0, 0));
     /// ```
     pub fn with_font_color(mut self, font_color: impl Into<FontColor>) -> Self {
@@ -550,11 +523,11 @@ impl TextStyle {
     ///
     /// # Examples
     /// ```
-    /// use protextinator::style::{TextStyle, TextAlignment};
-    /// 
-    /// let style = TextStyle::default().with_horizontal_alignment(TextAlignment::Center);
+    /// use protextinator::style::{TextStyle, HorizontalTextAlignment};
+    ///
+    /// let style = TextStyle::default().with_horizontal_alignment(HorizontalTextAlignment::Center);
     /// ```
-    pub fn with_horizontal_alignment(mut self, alignment: TextAlignment) -> Self {
+    pub fn with_horizontal_alignment(mut self, alignment: HorizontalTextAlignment) -> Self {
         self.horizontal_alignment = alignment;
         self
     }
@@ -567,7 +540,7 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::{TextStyle, VerticalTextAlignment};
-    /// 
+    ///
     /// let style = TextStyle::default().with_vertical_alignment(VerticalTextAlignment::Center);
     /// ```
     pub fn with_vertical_alignment(mut self, alignment: VerticalTextAlignment) -> Self {
@@ -583,16 +556,16 @@ impl TextStyle {
     ///
     /// # Examples
     /// ```
-    /// use protextinator::style::{TextStyle, TextAlignment, VerticalTextAlignment};
-    /// 
+    /// use protextinator::style::{TextStyle, HorizontalTextAlignment, VerticalTextAlignment};
+    ///
     /// let style = TextStyle::default().with_alignment(
-    ///     TextAlignment::Center,
+    ///     HorizontalTextAlignment::Center,
     ///     VerticalTextAlignment::Center
     /// );
     /// ```
     pub fn with_alignment(
         mut self,
-        horizontal: TextAlignment,
+        horizontal: HorizontalTextAlignment,
         vertical: VerticalTextAlignment,
     ) -> Self {
         self.horizontal_alignment = horizontal;
@@ -608,7 +581,7 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::{TextStyle, TextWrap};
-    /// 
+    ///
     /// let style = TextStyle::default().with_wrap(TextWrap::Wrap);
     /// ```
     pub fn with_wrap(mut self, wrap: TextWrap) -> Self {
@@ -624,7 +597,7 @@ impl TextStyle {
     /// # Examples
     /// ```
     /// use protextinator::style::TextStyle;
-    /// 
+    ///
     /// let style = TextStyle::default().with_font_size(16.0).with_line_height(1.5);
     /// assert_eq!(style.line_height_pt(), 24.0); // 16.0 * 1.5
     /// ```

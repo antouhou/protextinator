@@ -38,11 +38,11 @@ impl Id {
     /// # Examples
     /// ```
     /// use protextinator::Id;
-    /// 
+    ///
     /// let id1 = Id::new("my_text_element");
     /// let id2 = Id::new("my_text_element");
     /// assert_eq!(id1, id2); // Same input produces same ID
-    /// 
+    ///
     /// let id3 = Id::new(42);
     /// let id4 = Id::new((42, "suffix"));
     /// assert_ne!(id3, id4); // Different inputs produce different IDs
@@ -66,11 +66,11 @@ impl Id {
     /// # Examples
     /// ```
     /// use protextinator::Id;
-    /// 
+    ///
     /// let base_id = Id::new("window");
     /// let button_id = base_id.with("button");
     /// let label_id = base_id.with("label");
-    /// 
+    ///
     /// assert_ne!(button_id, label_id);
     /// ```
     pub fn with(&self, id: impl Hash) -> Self {

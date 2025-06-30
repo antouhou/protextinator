@@ -1,9 +1,16 @@
 //! # Protextinator
 //!
 //! Text editing and rendering library built on top of [`cosmic_text`], that provides a simpler
-//! API with some additional features, like measuring text buffer size, a simple interface for
-//! loading and managing fonts, a collection of text states that has optional track of usage for
-//! garbage collection, custom metadata for text states, and more.
+//! API with additional features, such as:
+//!
+//! - Vertical text alignment
+//! - Measuring text buffer size
+//! - Managing scroll position with absolute coordinates
+//! - A simple interface for loading and managing fonts
+//! - A collection of text states that has optional track of usage for garbage collection
+//! - Custom metadata for text states
+//!   
+//! and more.
 //!
 //! ## Basic Usage
 //!
@@ -19,6 +26,14 @@
 //! let id = protextinator::Id::new("my_text");
 //! let text = "Hello, world!";
 //! text_manager.create_state(id, text, ());
+//! // Add fonts
+//! text_manager.load_fonts(&[]);
+//! // Alternatively, you can load fonts from bytes if you want to embed them into the binary
+//! // or download them at runtime as bytes
+//! text_manager.load_fonts_from_bytes(&[]);
+//!
+//! // Optional: Marks the beginning of a frame so that you can track which text states are accessed
+//! text_manager.start_frame();
 //!
 //! // Configure the text area size and style
 //! if let Some(state) = text_manager.text_states.get_mut(&id) {
@@ -35,10 +50,13 @@
 //!     
 //!     // Recalculate layout
 //!     state.recalculate(&mut text_manager.text_context);
-//! 
+//!
 //!     // Get the inner size of the buffer - i.e., how much space the text needs to occupy
 //!     let inner_size = state.inner_size();
 //! }
+//!
+//! // Optional: going to remove all states that were not accessed during the current frame
+//! text_manager.end_frame();
 //! ```
 
 mod action;

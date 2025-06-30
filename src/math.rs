@@ -25,7 +25,7 @@ impl Rect {
     /// # Examples
     /// ```
     /// use protextinator::math::{Rect, Point};
-    /// 
+    ///
     /// let rect = Rect::new(Point::new(0.0, 0.0), Point::new(100.0, 50.0));
     /// assert_eq!(rect.width(), 100.0);
     /// assert_eq!(rect.height(), 50.0);
@@ -40,7 +40,7 @@ impl Rect {
     /// # Examples
     /// ```
     /// use protextinator::math::{Rect, Point};
-    /// 
+    ///
     /// let rect = Rect::new(Point::new(0.0, 10.0), Point::new(100.0, 60.0));
     /// assert_eq!(rect.height(), 50.0);
     /// ```
@@ -54,7 +54,7 @@ impl Rect {
     /// # Examples
     /// ```
     /// use protextinator::math::{Rect, Point};
-    /// 
+    ///
     /// let rect = Rect::new(Point::new(10.0, 0.0), Point::new(110.0, 50.0));
     /// assert_eq!(rect.width(), 100.0);
     /// ```
@@ -68,7 +68,7 @@ impl Rect {
     /// # Examples
     /// ```
     /// use protextinator::math::{Rect, Point};
-    /// 
+    ///
     /// let rect = Rect::new(Point::new(0.0, 0.0), Point::new(100.0, 50.0));
     /// assert_eq!(rect.size(), (100.0, 50.0));
     /// ```
@@ -120,7 +120,7 @@ impl Point {
     /// # Examples
     /// ```
     /// use protextinator::math::Point;
-    /// 
+    ///
     /// let point = Point::new(10.0, 20.0);
     /// assert_eq!(point.x, 10.0);
     /// assert_eq!(point.y, 20.0);
@@ -134,7 +134,7 @@ impl Point {
     /// # Examples
     /// ```
     /// use protextinator::math::Point;
-    /// 
+    ///
     /// let point = Point::new(10.0, 20.0);
     /// assert_eq!(point.to_tuple(), (10.0, 20.0));
     /// ```
@@ -154,10 +154,10 @@ impl Point {
     /// # Examples
     /// ```
     /// use protextinator::math::Point;
-    /// 
+    ///
     /// let p1 = Point::new(10.0, 20.0);
     /// let p2 = Point::new(10.001, 19.999);
-    /// 
+    ///
     /// assert!(p1.approx_eq(&p2, 0.01));
     /// assert!(!p1.approx_eq(&p2, 0.0001));
     /// ```
