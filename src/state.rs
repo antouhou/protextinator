@@ -739,7 +739,11 @@ impl<T> TextState<T> {
         }
     }
 
-    /// Sets the absolute scroll position of the text buffer.
+    /// Sets the absolute scroll position of the text buffer. Note that text that has fixed
+    /// alignment (e.g. `VerticalTextAlignment::Top`) will not be affected by this method,
+    /// and the scroll position will be calculated based on the current text layout and line
+    /// heights. For the scroll to take effect, alignment must be set to
+    /// `VerticalTextAlignment::None`.
     ///
     /// This allows you to programmatically scroll the text content to a specific position.
     /// The scroll position is calculated based on line heights and text layout.
@@ -756,6 +760,11 @@ impl<T> TextState<T> {
     /// state.set_absolute_scroll(Point::new(0.0, 50.0));
     /// ```
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
+        if self.style().vertical_alignment != VerticalTextAlignment::None {
+            // If vertical alignment is set, we cannot set an absolute scroll
+            return;
+        }
+
         let mut new_scroll = self.buffer.scroll();
 
         new_scroll.horizontal = scroll.x;
