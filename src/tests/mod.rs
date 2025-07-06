@@ -4,10 +4,12 @@ use crate::style::{
 };
 use cosmic_text::Color;
 
+mod apply_action;
 mod byte_offset;
 mod caret_positioning;
 mod copy_selected_text;
 mod serialization;
+mod text_state;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {
@@ -16,7 +18,7 @@ fn mono_style_test() -> TextStyle {
         font_color: FontColor(Color::rgb(0, 0, 0)),
         horizontal_alignment: HorizontalTextAlignment::Start,
         vertical_alignment: VerticalTextAlignment::Start,
-        wrap: Some(TextWrap::NoWrap), // No wrapping to ensure single line
+        wrap: Some(TextWrap::NoWrap), // No wrapping to ensure a single line
         font_family: FontFamily::Monospace,
     }
 }
