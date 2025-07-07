@@ -921,6 +921,8 @@ impl<T> TextState<T> {
         if update_reason.is_cursor_updated() {
             let text_area_size = self.params.size();
             let old_scroll = self.buffer.scroll();
+            let old_relative_caret_x = self.relative_caret_position.map_or(0.0, |p| p.x);
+            let old_absolute_caret_x = old_relative_caret_x + old_scroll.horizontal;
 
             let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
                 &mut self.buffer,
@@ -930,19 +932,13 @@ impl<T> TextState<T> {
                 self.params.style(),
             )?;
             let mut new_scroll = self.buffer.scroll();
-            println!("old: {}", old_scroll.horizontal);
-
-            let current_relative_caret_offset = caret_position_relative_to_buffer.x;
-
             let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
             let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
-            println!("new: {}", new_absolute_caret_offset);
 
             // TODO: A little hack to set horizontal scroll
-
             let current_absolute_visible_text_area = (
                 old_scroll.horizontal,
                 old_scroll.horizontal + text_area_width,
@@ -951,57 +947,36 @@ impl<T> TextState<T> {
             let max = current_absolute_visible_text_area.1;
             let is_new_caret_visible =
                 new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
-            println!("Is new caret visible: {}", is_new_caret_visible);
 
-            // If caret is within the visible text area, we don't need to scroll.
+            // If the caret is within the visible text area, we don't need to scroll.
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
-                let inner_dimensions = self.inner_size();
-                let area_width = self.outer_size().x;
-                let inner_larger_than_outer = inner_dimensions.x > area_width;
-                let outer_with_scroll_larger_than_inner =
-                    area_width + new_scroll.horizontal > inner_dimensions.x;
-                if inner_larger_than_outer {
-                    if outer_with_scroll_larger_than_inner {
-                        println!("Hehe");
-                        new_scroll.horizontal = inner_dimensions.x - area_width + self.caret_width;
-                    } else {
-                        println!("Not hehe");
-                        // println!("Not hehe");
-                        // new_scroll.horizontal = 0.0;
+                let is_moving_caret_without_updating_the_text = matches!(
+                    update_reason,
+                    UpdateReason::MoveCaret
+                );
+                if !is_moving_caret_without_updating_the_text {
+                    let text_shift = old_absolute_caret_x - new_absolute_caret_offset;
+
+                    // If a text was deleted (caret moved left), adjust the scroll to compensate
+                    if text_shift > 0.0 {
+                        // Adjust scroll to keep the caret visually in the same position
+                        new_scroll.horizontal = (old_scroll.horizontal - text_shift).max(0.0);
+
+                        // Ensure we don't scroll beyond the text boundaries
+                        let inner_dimensions = self.inner_size();
+                        let area_width = self.outer_size().x;
+
+                        if inner_dimensions.x > area_width {
+                            // Text is larger than viewport - clamp scroll to valid range
+                            let max_scroll = inner_dimensions.x - area_width + self.caret_width;
+                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll);
+                        } else {
+                            // Text fits within the viewport - no scroll needed
+                            new_scroll.horizontal = 0.0;
+                        }
                     }
-                } else {
-                    println!("Dunno");
-                    // new_scroll.horizontal = 0.0;
                 }
-                // let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
-                //     text_area_width,
-                //     current_relative_caret_offset,
-                //     new_absolute_caret_offset,
-                //     old_scroll.horizontal,
-                // );
-                //
-                // let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
-                // let is_deleting_text = matches!(
-                //     update_reason,
-                //     UpdateReason::DeletedTextAtCursor | UpdateReason::InsertedText
-                // );
-                // println!("Is moving caret: {}", is_moving_caret);
-                //
-                // // Deleting text from the end while horizontal scroll is present
-                // if should_update_horizontal_scroll && !is_moving_caret {
-                //     if old_scroll.horizontal > 0.0 {
-                //         println!("Suchka");
-                //         new_scroll.horizontal = new_absolute_caret_offset - text_area_width + self.caret_width;
-                //     } else {
-                //         println!("Not suchka");
-                //         println!("Old scroll: {}", old_scroll.horizontal);
-                //         println!("New scroll: {}", new_scroll.horizontal);
-                //         // new_scroll.horizontal = old_scroll.horizontal;
-                //     }
-                // } else {
-                //     new_scroll.horizontal = old_scroll.horizontal;
-                // }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
                     new_absolute_caret_offset - text_area_width + self.caret_width;
@@ -1017,57 +992,6 @@ impl<T> TextState<T> {
         }
 
         None
-    }
-
-    /// Determines if we should use improved scroll behavior where the caret stays visually
-    /// fixed while deleting overflowing text, instead of moving the caret within the visible area.
-    ///
-    /// This behavior is used when:
-    /// 1. Text overflows the visible area (text is longer than area width)
-    /// 2. We're likely deleting from the end (caret moved to the left)
-    /// 3. There's horizontal scroll present
-    fn should_update_horizontal_scroll(
-        &self,
-        text_area_width: f32,
-        old_relative_caret_x: f32,
-        new_absolute_caret_x: f32,
-        current_scroll_x: f32,
-    ) -> bool {
-        // Only apply improved behavior when there's existing scroll
-        if current_scroll_x <= 0.0 {
-            return false;
-        }
-
-        // Calculate approximate text width based on buffer content
-        let text_overflows = self.estimate_text_overflows(text_area_width);
-        if !text_overflows {
-            return false;
-        }
-
-        // Check if caret moved to the left (likely deletion from end)
-        let old_absolute_caret_x = old_relative_caret_x + current_scroll_x;
-
-        // Use improved behavior when text overflows and caret moved left
-        new_absolute_caret_x < old_absolute_caret_x
-    }
-
-    /// Estimates if a text overflows the given width by examining the buffer's layout
-    fn estimate_text_overflows(&self, text_area_width: f32) -> bool {
-        // TODO: check if it's better done with inner_dimensions instead of trying to figure out width
-        // Look at the last glyph position to estimate if text overflows
-        if let Some(line) = &self.buffer.lines.last() {
-            if let Some(layouts) = line.layout_opt().as_ref() {
-                if let Some(layout) = layouts.last() {
-                    if let Some(last_glyph) = layout.glyphs.last() {
-                        let text_width = last_glyph.x + last_glyph.w;
-                        return text_width > text_area_width;
-                    }
-                }
-            }
-        }
-
-        // Fallback: assume no overflow if we can't determine
-        false
     }
 
     /// Reshapes the text buffer if parameters have changed since the last reshape.

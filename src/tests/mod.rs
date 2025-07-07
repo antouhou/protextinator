@@ -4,7 +4,6 @@ use crate::style::{
 };
 use cosmic_text::Color;
 
-mod apply_action;
 mod byte_offset;
 mod caret_positioning;
 mod copy_selected_text;
