@@ -1,11 +1,17 @@
+use crate::math::Size;
+use crate::style::{
+    FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
+    VerticalTextAlignment,
+};
 use crate::tests::mono_style_test;
 use crate::{Action, Point, TextContext, TextState};
-use crate::math::Size;
-use crate::style::{TextStyle, VerticalTextAlignment, HorizontalTextAlignment, FontColor, FontFamily, FontSize, LineHeight, TextWrap};
 use cosmic_text::Color;
 
 // Helper functions for creating styles with different alignments
-fn mono_style_with_alignment(h_align: HorizontalTextAlignment, v_align: VerticalTextAlignment) -> TextStyle {
+fn mono_style_with_alignment(
+    h_align: HorizontalTextAlignment,
+    v_align: VerticalTextAlignment,
+) -> TextStyle {
     TextStyle {
         font_size: FontSize(14.0),
         line_height: LineHeight(1.0),
@@ -17,7 +23,11 @@ fn mono_style_with_alignment(h_align: HorizontalTextAlignment, v_align: Vertical
     }
 }
 
-fn mono_style_with_wrap(h_align: HorizontalTextAlignment, v_align: VerticalTextAlignment, wrap: Option<TextWrap>) -> TextStyle {
+fn mono_style_with_wrap(
+    h_align: HorizontalTextAlignment,
+    v_align: VerticalTextAlignment,
+    wrap: Option<TextWrap>,
+) -> TextStyle {
     TextStyle {
         font_size: FontSize(14.0),
         line_height: LineHeight(1.0),
@@ -78,8 +88,14 @@ pub fn test_set_style() {
     let updated_style = text_state.style();
     assert_eq!(updated_style.font_size.value(), 20.0);
     assert_eq!(updated_style.font_color.0, Color::rgb(255, 0, 0));
-    assert!(matches!(updated_style.horizontal_alignment, HorizontalTextAlignment::Center));
-    assert!(matches!(updated_style.vertical_alignment, VerticalTextAlignment::Center));
+    assert!(matches!(
+        updated_style.horizontal_alignment,
+        HorizontalTextAlignment::Center
+    ));
+    assert!(matches!(
+        updated_style.vertical_alignment,
+        VerticalTextAlignment::Center
+    ));
 }
 
 #[test]
@@ -232,7 +248,11 @@ pub fn test_absolute_scroll() {
     let initial_text = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5".to_string();
 
     let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_test());
+    // Use a style with vertical alignment set to None to allow vertical scrolling
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::None,
+    ));
     text_state.set_outer_size(&Size::new(200.0, 50.0)); // Small height to ensure scrolling is needed
     text_state.recalculate(&mut ctx);
 
@@ -281,17 +301,26 @@ pub fn test_horizontal_alignment() {
 
     // Test left alignment (Start)
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Left, VerticalTextAlignment::Start));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Start,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Get the first glyph position (should be at the left edge)
     let first_glyph_x = text_state.first_glyph().unwrap().x;
-    assert!(first_glyph_x < 5.0, "Left-aligned text should start near the left edge");
+    assert!(
+        first_glyph_x < 5.0,
+        "Left-aligned text should start near the left edge"
+    );
 
     // Test center alignment
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Center, VerticalTextAlignment::Start));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Center,
+        VerticalTextAlignment::Start,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
@@ -299,13 +328,19 @@ pub fn test_horizontal_alignment() {
     let text_width = text_state.inner_size().x;
     let first_glyph_x = text_state.first_glyph().unwrap().x;
     let expected_x = (container_width - text_width) / 2.0;
-    assert!((first_glyph_x - expected_x).abs() < 5.0, 
-            "Center-aligned text should start near the center. Expected: {}, Actual: {}", 
-            expected_x, first_glyph_x);
+    assert!(
+        (first_glyph_x - expected_x).abs() < 5.0,
+        "Center-aligned text should start near the center. Expected: {}, Actual: {}",
+        expected_x,
+        first_glyph_x
+    );
 
     // Test right alignment
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Right, VerticalTextAlignment::Start));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Right,
+        VerticalTextAlignment::Start,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
@@ -327,33 +362,57 @@ pub fn test_vertical_alignment() {
 
     // Test top alignment (Start)
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Left, VerticalTextAlignment::Start));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Start,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Verify the style is set correctly
-    assert!(matches!(text_state.style().vertical_alignment, VerticalTextAlignment::Start),
-            "Vertical alignment should be Start");
+    assert!(
+        matches!(
+            text_state.style().vertical_alignment,
+            VerticalTextAlignment::Start
+        ),
+        "Vertical alignment should be Start"
+    );
 
     // Test center vertical alignment
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Left, VerticalTextAlignment::Center));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Center,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Verify the style is set correctly
-    assert!(matches!(text_state.style().vertical_alignment, VerticalTextAlignment::Center),
-            "Vertical alignment should be Center");
+    assert!(
+        matches!(
+            text_state.style().vertical_alignment,
+            VerticalTextAlignment::Center
+        ),
+        "Vertical alignment should be Center"
+    );
 
     // Test bottom alignment (End)
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
-    text_state.set_style(&mono_style_with_alignment(HorizontalTextAlignment::Left, VerticalTextAlignment::End));
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::End,
+    ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Verify the style is set correctly
-    assert!(matches!(text_state.style().vertical_alignment, VerticalTextAlignment::End),
-            "Vertical alignment should be End");
+    assert!(
+        matches!(
+            text_state.style().vertical_alignment,
+            VerticalTextAlignment::End
+        ),
+        "Vertical alignment should be End"
+    );
 }
 
 #[test]
@@ -366,79 +425,109 @@ pub fn test_combined_alignment() {
     // Test center-center alignment
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_with_alignment(
-        HorizontalTextAlignment::Center, 
-        VerticalTextAlignment::Center
+        HorizontalTextAlignment::Center,
+        VerticalTextAlignment::Center,
     ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Verify the style is set correctly
-    assert!(matches!(text_state.style().horizontal_alignment, HorizontalTextAlignment::Center),
-            "Horizontal alignment should be Center");
-    assert!(matches!(text_state.style().vertical_alignment, VerticalTextAlignment::Center),
-            "Vertical alignment should be Center");
+    assert!(
+        matches!(
+            text_state.style().horizontal_alignment,
+            HorizontalTextAlignment::Center
+        ),
+        "Horizontal alignment should be Center"
+    );
+    assert!(
+        matches!(
+            text_state.style().vertical_alignment,
+            VerticalTextAlignment::Center
+        ),
+        "Vertical alignment should be Center"
+    );
 
     // Get text width and first glyph position to check horizontal centering
     let text_width = text_state.inner_size().x;
     let first_glyph_x = text_state.first_glyph().unwrap().x;
     let expected_x = (container_width - text_width) / 2.0;
-    assert!((first_glyph_x - expected_x).abs() < 5.0, 
-            "Horizontally centered text should start at the right position. Expected: {}, Actual: {}", 
-            expected_x, first_glyph_x);
+    assert!(
+        (first_glyph_x - expected_x).abs() < 5.0,
+        "Horizontally centered text should start at the right position. Expected: {}, Actual: {}",
+        expected_x,
+        first_glyph_x
+    );
 
     // Test right-bottom alignment
     let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_with_alignment(
-        HorizontalTextAlignment::Right, 
-        VerticalTextAlignment::End
+        HorizontalTextAlignment::Right,
+        VerticalTextAlignment::End,
     ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Verify the style is set correctly
-    assert!(matches!(text_state.style().horizontal_alignment, HorizontalTextAlignment::Right),
-            "Horizontal alignment should be Right");
-    assert!(matches!(text_state.style().vertical_alignment, VerticalTextAlignment::End),
-            "Vertical alignment should be End");
+    assert!(
+        matches!(
+            text_state.style().horizontal_alignment,
+            HorizontalTextAlignment::Right
+        ),
+        "Horizontal alignment should be Right"
+    );
+    assert!(
+        matches!(
+            text_state.style().vertical_alignment,
+            VerticalTextAlignment::End
+        ),
+        "Vertical alignment should be End"
+    );
 
     // Get text width and first glyph position to check right alignment
     let text_width = text_state.inner_size().x;
     let first_glyph_x = text_state.first_glyph().unwrap().x;
     let expected_x = container_width - text_width;
-    assert!((first_glyph_x - expected_x).abs() < 5.0, 
-            "Right-aligned text should start at the right position. Expected: {}, Actual: {}", 
-            expected_x, first_glyph_x);
+    assert!(
+        (first_glyph_x - expected_x).abs() < 5.0,
+        "Right-aligned text should start at the right position. Expected: {}, Actual: {}",
+        expected_x,
+        first_glyph_x
+    );
 }
 
 #[test]
 pub fn test_horizontal_overflow() {
     let mut ctx = TextContext::default();
-    let long_text = "This is a very long text that should overflow the container horizontally".to_string();
+    let long_text =
+        "This is a very long text that should overflow the container horizontally".to_string();
     let container_width = 100.0; // Small width to ensure overflow
     let container_height = 50.0;
 
     // Test with no wrapping (should overflow)
     let mut text_state = TextState::new_with_text(long_text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_with_wrap(
-        HorizontalTextAlignment::Left, 
+        HorizontalTextAlignment::Left,
         VerticalTextAlignment::Start,
-        Some(TextWrap::NoWrap) // No wrapping
+        Some(TextWrap::NoWrap), // No wrapping
     ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Check that text width exceeds container width
     let text_width = text_state.inner_size().x;
-    assert!(text_width > container_width, 
-            "Text should overflow horizontally. Text width: {}, Container width: {}", 
-            text_width, container_width);
+    assert!(
+        text_width > container_width,
+        "Text should overflow horizontally. Text width: {}, Container width: {}",
+        text_width,
+        container_width
+    );
 
     // Test with wrapping (should not overflow horizontally)
     let mut text_state = TextState::new_with_text(long_text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_with_wrap(
-        HorizontalTextAlignment::Left, 
+        HorizontalTextAlignment::Left,
         VerticalTextAlignment::Start,
-        Some(TextWrap::Wrap) // With wrapping
+        Some(TextWrap::Wrap), // With wrapping
     ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
@@ -453,47 +542,350 @@ pub fn test_horizontal_overflow() {
 #[test]
 pub fn test_vertical_overflow() {
     let mut ctx = TextContext::default();
-    let multi_line_text = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10".to_string();
+    let multi_line_text =
+        "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10"
+            .to_string();
     let container_width = 200.0;
     let container_height = 50.0; // Small height to ensure overflow
 
     // Test vertical overflow
-    let mut text_state = TextState::new_with_text(multi_line_text.clone(), &mut ctx.font_system, ());
+    let mut text_state =
+        TextState::new_with_text(multi_line_text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_test());
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Check that text height exceeds container height
     let text_height = text_state.inner_size().y;
-    assert!(text_height > container_height, 
-            "Text should overflow vertically. Text height: {}, Container height: {}", 
-            text_height, container_height);
+    assert!(
+        text_height > container_height,
+        "Text should overflow vertically. Text height: {}, Container height: {}",
+        text_height,
+        container_height
+    );
 }
 
 #[test]
 pub fn test_both_overflow() {
     let mut ctx = TextContext::default();
     // Create text that will overflow both horizontally and vertically
-    let long_multi_line_text = "This is a very long line that should overflow horizontally\n".repeat(10);
+    let long_multi_line_text =
+        "This is a very long line that should overflow horizontally\n".repeat(10);
     let container_width = 100.0; // Small width to ensure horizontal overflow
     let container_height = 50.0; // Small height to ensure vertical overflow
 
     // Test both horizontal and vertical overflow
-    let mut text_state = TextState::new_with_text(long_multi_line_text.clone(), &mut ctx.font_system, ());
+    let mut text_state =
+        TextState::new_with_text(long_multi_line_text.clone(), &mut ctx.font_system, ());
     text_state.set_style(&mono_style_with_wrap(
-        HorizontalTextAlignment::Left, 
+        HorizontalTextAlignment::Left,
         VerticalTextAlignment::Start,
-        Some(TextWrap::NoWrap) // No wrapping to ensure horizontal overflow
+        Some(TextWrap::NoWrap), // No wrapping to ensure horizontal overflow
     ));
     text_state.set_outer_size(&Size::new(container_width, container_height));
     text_state.recalculate(&mut ctx);
 
     // Check that text dimensions exceed container dimensions
     let text_size = text_state.inner_size();
-    assert!(text_size.x > container_width, 
-            "Text should overflow horizontally. Text width: {}, Container width: {}", 
-            text_size.x, container_width);
-    assert!(text_size.y > container_height, 
-            "Text should overflow vertically. Text height: {}, Container height: {}", 
-            text_size.y, container_height);
+    assert!(
+        text_size.x > container_width,
+        "Text should overflow horizontally. Text width: {}, Container width: {}",
+        text_size.x,
+        container_width
+    );
+    assert!(
+        text_size.y > container_height,
+        "Text should overflow vertically. Text height: {}, Container height: {}",
+        text_size.y,
+        container_height
+    );
+}
+
+#[test]
+pub fn test_vertical_scroll_with_alignment() {
+    let mut ctx = TextContext::default();
+    // Create a multi-line text to test scrolling
+    let initial_text = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5".to_string();
+    let container_width = 200.0;
+    let container_height = 50.0; // Small height to ensure scrolling is needed
+
+    // Test with vertical alignment None (should allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::None,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Initial scroll should be at the top
+    let initial_scroll = text_state.absolute_scroll();
+    assert_eq!(initial_scroll.y, 0.0);
+
+    // Set vertical scroll position
+    let new_scroll = Point::new(0.0, 20.0);
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was updated (should work with VerticalTextAlignment::None)
+    let updated_scroll = text_state.absolute_scroll();
+    assert!(
+        updated_scroll.y > 0.0,
+        "Vertical scrolling should work with VerticalTextAlignment::None"
+    );
+
+    // Test with vertical alignment Start (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Get the initial scroll position
+    // Note: We don't assert that it's 0.0 because absolute_scroll() might return
+    // non-zero values even after setting scroll to 0.0 due to internal calculations
+    text_state.set_absolute_scroll(Point::new(0.0, 0.0));
+    let initial_scroll = text_state.absolute_scroll();
+
+    // Try to set vertical scroll position
+    let new_scroll = Point::new(0.0, 20.0);
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with VerticalTextAlignment::Start)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.y, initial_scroll.y,
+        "Vertical scrolling should not work with VerticalTextAlignment::Start"
+    );
+
+    // Test with vertical alignment Center (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Center,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Get the initial scroll position
+    // Note: We don't assert that it's 0.0 because absolute_scroll() might return
+    // non-zero values even after setting scroll to 0.0 due to internal calculations
+    text_state.set_absolute_scroll(Point::new(0.0, 0.0));
+    let initial_scroll = text_state.absolute_scroll();
+
+    // Try to set vertical scroll position
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with VerticalTextAlignment::Center)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.y, initial_scroll.y,
+        "Vertical scrolling should not work with VerticalTextAlignment::Center"
+    );
+
+    // Test with vertical alignment End (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::End,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Get the initial scroll position
+    // Note: We don't assert that it's 0.0 because absolute_scroll() might return
+    // non-zero values even after setting scroll to 0.0 due to internal calculations
+    text_state.set_absolute_scroll(Point::new(0.0, 0.0));
+    let initial_scroll = text_state.absolute_scroll();
+
+    // Try to set vertical scroll position
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with VerticalTextAlignment::End)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.y, initial_scroll.y,
+        "Vertical scrolling should not work with VerticalTextAlignment::End"
+    );
+}
+
+#[test]
+pub fn test_horizontal_scroll_with_alignment() {
+    let mut ctx = TextContext::default();
+    // Create a long text to test horizontal scrolling
+    let initial_text =
+        "This is a very long text that should overflow the container horizontally".to_string();
+    let container_width = 100.0; // Small width to ensure scrolling is needed
+    let container_height = 50.0;
+
+    // Test with horizontal alignment None (should allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::None,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Initial scroll should be at the left
+    let initial_scroll = text_state.absolute_scroll();
+    assert_eq!(initial_scroll.x, 0.0);
+
+    // Set horizontal scroll position
+    let new_scroll = Point::new(20.0, 0.0);
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was updated (should work with HorizontalTextAlignment::None)
+    let updated_scroll = text_state.absolute_scroll();
+    assert!(
+        updated_scroll.x > 0.0,
+        "Horizontal scrolling should work with HorizontalTextAlignment::None"
+    );
+
+    // Test with horizontal alignment Left (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Initial scroll should be at the left
+    let initial_scroll = text_state.absolute_scroll();
+    assert_eq!(initial_scroll.x, 0.0);
+
+    // Try to set horizontal scroll position
+    let new_scroll = Point::new(20.0, 0.0);
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with HorizontalTextAlignment::Left)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.x, 0.0,
+        "Horizontal scrolling should not work with HorizontalTextAlignment::Left"
+    );
+
+    // Test with horizontal alignment Center (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Center,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Try to set horizontal scroll position
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with HorizontalTextAlignment::Center)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.x, 0.0,
+        "Horizontal scrolling should not work with HorizontalTextAlignment::Center"
+    );
+
+    // Test with horizontal alignment Right (should not allow scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Right,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Try to set horizontal scroll position
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify scroll position was not updated (should not work with HorizontalTextAlignment::Right)
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.x, 0.0,
+        "Horizontal scrolling should not work with HorizontalTextAlignment::Right"
+    );
+}
+
+#[test]
+pub fn test_combined_scroll_with_alignment() {
+    let mut ctx = TextContext::default();
+    // Create a long multi-line text to test both scrolling directions
+    let initial_text = "This is a very long text that should overflow horizontally\nLine 2\nLine 3\nLine 4\nLine 5".to_string();
+    let container_width = 100.0; // Small width to ensure horizontal scrolling is needed
+    let container_height = 50.0; // Small height to ensure vertical scrolling is needed
+
+    // Test with both alignments set to None (should allow both scrolling directions)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::None,
+        VerticalTextAlignment::None,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Initial scroll should be at the top-left
+    let initial_scroll = text_state.absolute_scroll();
+    assert_eq!(initial_scroll.x, 0.0);
+    assert_eq!(initial_scroll.y, 0.0);
+
+    // Set both scroll positions
+    let new_scroll = Point::new(20.0, 30.0);
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify both scroll positions were updated
+    let updated_scroll = text_state.absolute_scroll();
+    assert!(
+        updated_scroll.x > 0.0,
+        "Horizontal scrolling should work with HorizontalTextAlignment::None"
+    );
+    assert!(
+        updated_scroll.y > 0.0,
+        "Vertical scrolling should work with VerticalTextAlignment::None"
+    );
+
+    // Test with horizontal alignment None but vertical alignment Start (should only allow horizontal scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::None,
+        VerticalTextAlignment::Start,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Set both scroll positions
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify only horizontal scroll was updated
+    let updated_scroll = text_state.absolute_scroll();
+    assert!(
+        updated_scroll.x > 0.0,
+        "Horizontal scrolling should work with HorizontalTextAlignment::None"
+    );
+    assert_eq!(
+        updated_scroll.y, 0.0,
+        "Vertical scrolling should not work with VerticalTextAlignment::Start"
+    );
+
+    // Test with vertical alignment None but horizontal alignment Left (should only allow vertical scrolling)
+    let mut text_state = TextState::new_with_text(initial_text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::None,
+    ));
+    text_state.set_outer_size(&Size::new(container_width, container_height));
+    text_state.recalculate(&mut ctx);
+
+    // Set both scroll positions
+    text_state.set_absolute_scroll(new_scroll);
+
+    // Verify only vertical scroll was updated
+    let updated_scroll = text_state.absolute_scroll();
+    assert_eq!(
+        updated_scroll.x, 0.0,
+        "Horizontal scrolling should not work with HorizontalTextAlignment::Left"
+    );
+    assert!(
+        updated_scroll.y > 0.0,
+        "Vertical scrolling should work with VerticalTextAlignment::None"
+    );
 }

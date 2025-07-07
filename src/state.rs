@@ -10,7 +10,7 @@ use crate::buffer_utils::{
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
-use crate::style::{TextStyle, VerticalTextAlignment};
+use crate::style::{HorizontalTextAlignment, TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
 use crate::{Point, Rect};
@@ -760,40 +760,53 @@ impl<T> TextState<T> {
     /// state.set_absolute_scroll(Point::new(0.0, 50.0));
     /// ```
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
-        if self.style().vertical_alignment != VerticalTextAlignment::None {
-            // If vertical alignment is set, we cannot set an absolute scroll
+        let mut new_scroll = self.buffer.scroll();
+
+        let can_scroll_vertically =
+            matches!(self.style().vertical_alignment, VerticalTextAlignment::None);
+
+        let can_scroll_horizontally = matches!(
+            self.style().horizontal_alignment,
+            HorizontalTextAlignment::None
+        );
+        let can_scroll_horizontally = true;
+
+        if !can_scroll_vertically && !can_scroll_horizontally {
+            // If both alignments are set, we cannot scroll
             return;
         }
 
-        let mut new_scroll = self.buffer.scroll();
-
-        new_scroll.horizontal = scroll.x;
-
-        let line_height = self.style().line_height_pt();
-        let mut line_index = 0;
-        let mut accumulated_height = 0.0;
-
-        for (i, line) in self.buffer.lines.iter().enumerate() {
-            let mut line_height_total = 0.0;
-
-            if let Some(layout_lines) = line.layout_opt() {
-                for layout_line in layout_lines {
-                    line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
-                }
-            }
-
-            if accumulated_height + line_height_total > scroll.y {
-                line_index = i;
-                break;
-            }
-
-            accumulated_height += line_height_total;
-            line_index = i + 1; // In case we don't break, this will be the last line
+        if can_scroll_horizontally {
+            new_scroll.horizontal = scroll.x;
         }
 
-        // Set the line and calculate the remaining vertical offset
-        new_scroll.line = line_index;
-        new_scroll.vertical = scroll.y - accumulated_height;
+        if can_scroll_vertically {
+            let line_height = self.style().line_height_pt();
+            let mut line_index = 0;
+            let mut accumulated_height = 0.0;
+
+            for (i, line) in self.buffer.lines.iter().enumerate() {
+                let mut line_height_total = 0.0;
+
+                if let Some(layout_lines) = line.layout_opt() {
+                    for layout_line in layout_lines {
+                        line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                    }
+                }
+
+                if accumulated_height + line_height_total > scroll.y {
+                    line_index = i;
+                    break;
+                }
+
+                accumulated_height += line_height_total;
+                line_index = i + 1; // In case we don't break, this will be the last line
+            }
+
+            // Set the line and calculate the remaining vertical offset
+            new_scroll.line = line_index;
+            new_scroll.vertical = scroll.y - accumulated_height;
+        }
 
         self.buffer.set_scroll(new_scroll);
     }
@@ -917,6 +930,7 @@ impl<T> TextState<T> {
                 self.params.style(),
             )?;
             let mut new_scroll = self.buffer.scroll();
+            println!("old: {}", old_scroll.horizontal);
 
             let current_relative_caret_offset = caret_position_relative_to_buffer.x;
 
@@ -925,6 +939,7 @@ impl<T> TextState<T> {
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
             let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
+            println!("new: {}", new_absolute_caret_offset);
 
             // TODO: A little hack to set horizontal scroll
 
@@ -936,25 +951,57 @@ impl<T> TextState<T> {
             let max = current_absolute_visible_text_area.1;
             let is_new_caret_visible =
                 new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
+            println!("Is new caret visible: {}", is_new_caret_visible);
 
             // If caret is within the visible text area, we don't need to scroll.
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
-                let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
-                    text_area_width,
-                    current_relative_caret_offset,
-                    new_absolute_caret_offset,
-                    old_scroll.horizontal,
-                );
-
-                let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
-
-                if should_update_horizontal_scroll && !is_moving_caret {
-                    new_scroll.horizontal =
-                        new_absolute_caret_offset - current_relative_caret_offset;
+                let inner_dimensions = self.inner_size();
+                let area_width = self.outer_size().x;
+                let inner_larger_than_outer = inner_dimensions.x > area_width;
+                let outer_with_scroll_larger_than_inner =
+                    area_width + new_scroll.horizontal > inner_dimensions.x;
+                if inner_larger_than_outer {
+                    if outer_with_scroll_larger_than_inner {
+                        println!("Hehe");
+                        new_scroll.horizontal = inner_dimensions.x - area_width + self.caret_width;
+                    } else {
+                        println!("Not hehe");
+                        // println!("Not hehe");
+                        // new_scroll.horizontal = 0.0;
+                    }
                 } else {
-                    new_scroll.horizontal = old_scroll.horizontal;
+                    println!("Dunno");
+                    // new_scroll.horizontal = 0.0;
                 }
+                // let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
+                //     text_area_width,
+                //     current_relative_caret_offset,
+                //     new_absolute_caret_offset,
+                //     old_scroll.horizontal,
+                // );
+                //
+                // let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
+                // let is_deleting_text = matches!(
+                //     update_reason,
+                //     UpdateReason::DeletedTextAtCursor | UpdateReason::InsertedText
+                // );
+                // println!("Is moving caret: {}", is_moving_caret);
+                //
+                // // Deleting text from the end while horizontal scroll is present
+                // if should_update_horizontal_scroll && !is_moving_caret {
+                //     if old_scroll.horizontal > 0.0 {
+                //         println!("Suchka");
+                //         new_scroll.horizontal = new_absolute_caret_offset - text_area_width + self.caret_width;
+                //     } else {
+                //         println!("Not suchka");
+                //         println!("Old scroll: {}", old_scroll.horizontal);
+                //         println!("New scroll: {}", new_scroll.horizontal);
+                //         // new_scroll.horizontal = old_scroll.horizontal;
+                //     }
+                // } else {
+                //     new_scroll.horizontal = old_scroll.horizontal;
+                // }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
                     new_absolute_caret_offset - text_area_width + self.caret_width;

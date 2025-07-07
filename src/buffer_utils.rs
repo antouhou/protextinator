@@ -111,6 +111,7 @@ pub(crate) fn update_buffer(
     let text_area_size = params.size();
     let font_family = &text_style.font_family;
     let metadata = params.metadata();
+    let old_scroll = buffer.scroll();
 
     buffer.set_metrics(font_system, params.metrics());
     buffer.set_wrap(font_system, wrap.into());
@@ -133,7 +134,7 @@ pub(crate) fn update_buffer(
     let mut buffer_measurement = Size::default();
     for line in buffer.lines.iter_mut() {
         line.set_align(horizontal_alignment.into());
-        for line in line
+        for layout_line in line
             .layout(
                 font_system,
                 text_style.font_size.value(),
@@ -145,10 +146,32 @@ pub(crate) fn update_buffer(
             )
             .iter()
         {
-            buffer_measurement.y += line.line_height_opt.unwrap_or(text_style.line_height_pt());
-            buffer_measurement.x = buffer_measurement.x.max(line.w);
+            buffer_measurement.y += layout_line
+                .line_height_opt
+                .unwrap_or(text_style.line_height_pt());
+            buffer_measurement.x = buffer_measurement.x.max(layout_line.w);
         }
     }
 
+    if buffer_measurement.x > text_area_size.x {
+        // If the buffer is smaller than the text area, we need to set the width to the text area
+        // size to ensure that the text is centered.
+        // After we've measured the buffer, we need to run layout() again to realign the lines
+        for line in buffer.lines.iter_mut() {
+            line.reset_layout();
+            line.set_align(horizontal_alignment.into());
+            line.layout(
+                font_system,
+                text_style.font_size.value(),
+                Some(buffer_measurement.x),
+                text_style.wrap.unwrap_or_default().into(),
+                None,
+                // TODO: what is the default tab width? Make it configurable?
+                2,
+            );
+        }
+    }
+
+    buffer.set_scroll(old_scroll);
     buffer_measurement
 }

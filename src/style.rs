@@ -357,8 +357,11 @@ pub struct TextStyle {
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default)]
 pub enum HorizontalTextAlignment {
-    /// Align text to the start of the container (left in LTR, right in RTL).
+    /// No horizontal alignment, defaulting to the start of the text area. Set alignment
+    /// to `None` to be able to scroll horizontally.
     #[default]
+    None,
+    /// Align text to the start of the container (left in LTR, right in RTL).
     Start,
     /// Align text to the end of the container (right in LTR, left in RTL).
     End,
@@ -379,6 +382,7 @@ impl From<HorizontalTextAlignment> for Option<Align> {
     /// `Align` variant for other alignment types.
     fn from(val: HorizontalTextAlignment) -> Self {
         match val {
+            HorizontalTextAlignment::None => None,
             HorizontalTextAlignment::Start => None,
             HorizontalTextAlignment::End => Some(Align::End),
             HorizontalTextAlignment::Center => Some(Align::Center),
