@@ -21,8 +21,6 @@ pub enum Action {
     SelectAll,
     /// Delete the character before the cursor (backspace).
     DeleteBackward,
-    /// Insert whitespace at the cursor position.
-    InsertWhitespace,
     /// Move the cursor one position to the right.
     MoveCursorRight,
     /// Move the cursor one position to the left.

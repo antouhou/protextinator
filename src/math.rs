@@ -3,6 +3,8 @@
 //! This module provides fundamental geometric types used throughout the text system,
 //! including points, rectangles, and size representations.
 
+use std::ops::Sub;
+
 /// A 2D rectangle defined by minimum and maximum points.
 ///
 /// Rectangles are used to define text areas, selection bounds, and other
@@ -164,6 +166,30 @@ impl Point {
     #[inline(always)]
     pub fn approx_eq(&self, other: &Self, epsilon: f32) -> bool {
         (self.x - other.x).abs() <= epsilon && (self.y - other.y).abs() <= epsilon
+    }
+}
+
+impl Sub for Point {
+    type Output = Point;
+
+    /// Subtracts two points, resulting in a new point that represents the vector
+    /// from the second point to the first.
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::math::Point;
+    ///
+    /// let p1 = Point::new(10.0, 20.0);
+    /// let p2 = Point::new(5.0, 15.0);
+    ///
+    /// let result = p1 - p2;
+    /// assert_eq!(result, Point::new(5.0, 5.0));
+    /// ```
+    fn sub(self, other: Self) -> Self::Output {
+        Point {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
     }
 }
 

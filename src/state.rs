@@ -739,7 +739,11 @@ impl<T> TextState<T> {
         }
     }
 
-    /// Sets the absolute scroll position of the text buffer.
+    /// Sets the absolute scroll position of the text buffer. Note that text that has fixed
+    /// alignment (e.g. `VerticalTextAlignment::Top`) will not be affected by this method,
+    /// and the scroll position will be calculated based on the current text layout and line
+    /// heights. For the scroll to take effect, alignment must be set to
+    /// `VerticalTextAlignment::None`.
     ///
     /// This allows you to programmatically scroll the text content to a specific position.
     /// The scroll position is calculated based on line heights and text layout.
@@ -758,33 +762,38 @@ impl<T> TextState<T> {
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
         let mut new_scroll = self.buffer.scroll();
 
+        let can_scroll_vertically =
+            matches!(self.style().vertical_alignment, VerticalTextAlignment::None);
+
         new_scroll.horizontal = scroll.x;
 
-        let line_height = self.style().line_height_pt();
-        let mut line_index = 0;
-        let mut accumulated_height = 0.0;
+        if can_scroll_vertically {
+            let line_height = self.style().line_height_pt();
+            let mut line_index = 0;
+            let mut accumulated_height = 0.0;
 
-        for (i, line) in self.buffer.lines.iter().enumerate() {
-            let mut line_height_total = 0.0;
+            for (i, line) in self.buffer.lines.iter().enumerate() {
+                let mut line_height_total = 0.0;
 
-            if let Some(layout_lines) = line.layout_opt() {
-                for layout_line in layout_lines {
-                    line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                if let Some(layout_lines) = line.layout_opt() {
+                    for layout_line in layout_lines {
+                        line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                    }
                 }
+
+                if accumulated_height + line_height_total > scroll.y {
+                    line_index = i;
+                    break;
+                }
+
+                accumulated_height += line_height_total;
+                line_index = i + 1; // In case we don't break, this will be the last line
             }
 
-            if accumulated_height + line_height_total > scroll.y {
-                line_index = i;
-                break;
-            }
-
-            accumulated_height += line_height_total;
-            line_index = i + 1; // In case we don't break, this will be the last line
+            // Set the line and calculate the remaining vertical offset
+            new_scroll.line = line_index;
+            new_scroll.vertical = scroll.y - accumulated_height;
         }
-
-        // Set the line and calculate the remaining vertical offset
-        new_scroll.line = line_index;
-        new_scroll.vertical = scroll.y - accumulated_height;
 
         self.buffer.set_scroll(new_scroll);
     }
@@ -899,6 +908,8 @@ impl<T> TextState<T> {
         if update_reason.is_cursor_updated() {
             let text_area_size = self.params.size();
             let old_scroll = self.buffer.scroll();
+            let old_relative_caret_x = self.relative_caret_position.map_or(0.0, |p| p.x);
+            let old_absolute_caret_x = old_relative_caret_x + old_scroll.horizontal;
 
             let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
                 &mut self.buffer,
@@ -908,9 +919,6 @@ impl<T> TextState<T> {
                 self.params.style(),
             )?;
             let mut new_scroll = self.buffer.scroll();
-
-            let current_relative_caret_offset = caret_position_relative_to_buffer.x;
-
             let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
@@ -918,7 +926,6 @@ impl<T> TextState<T> {
             let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
 
             // TODO: A little hack to set horizontal scroll
-
             let current_absolute_visible_text_area = (
                 old_scroll.horizontal,
                 old_scroll.horizontal + text_area_width,
@@ -928,23 +935,32 @@ impl<T> TextState<T> {
             let is_new_caret_visible =
                 new_absolute_caret_offset >= min && new_absolute_caret_offset <= max;
 
-            // If caret is within the visible text area, we don't need to scroll.
+            // If the caret is within the visible text area, we don't need to scroll.
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
-                let should_update_horizontal_scroll = self.should_update_horizontal_scroll(
-                    text_area_width,
-                    current_relative_caret_offset,
-                    new_absolute_caret_offset,
-                    old_scroll.horizontal,
-                );
+                let is_moving_caret_without_updating_the_text =
+                    matches!(update_reason, UpdateReason::MoveCaret);
+                if !is_moving_caret_without_updating_the_text {
+                    let text_shift = old_absolute_caret_x - new_absolute_caret_offset;
 
-                let is_moving_caret = matches!(update_reason, UpdateReason::MoveCaret);
+                    // If a text was deleted (caret moved left), adjust the scroll to compensate
+                    if text_shift > 0.0 {
+                        // Adjust scroll to keep the caret visually in the same position
+                        new_scroll.horizontal = (old_scroll.horizontal - text_shift).max(0.0);
 
-                if should_update_horizontal_scroll && !is_moving_caret {
-                    new_scroll.horizontal =
-                        new_absolute_caret_offset - current_relative_caret_offset;
-                } else {
-                    new_scroll.horizontal = old_scroll.horizontal;
+                        // Ensure we don't scroll beyond the text boundaries
+                        let inner_dimensions = self.inner_size();
+                        let area_width = self.outer_size().x;
+
+                        if inner_dimensions.x > area_width {
+                            // Text is larger than viewport - clamp scroll to valid range
+                            let max_scroll = inner_dimensions.x - area_width + self.caret_width;
+                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll);
+                        } else {
+                            // Text fits within the viewport - no scroll needed
+                            new_scroll.horizontal = 0.0;
+                        }
+                    }
                 }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
@@ -961,57 +977,6 @@ impl<T> TextState<T> {
         }
 
         None
-    }
-
-    /// Determines if we should use improved scroll behavior where the caret stays visually
-    /// fixed while deleting overflowing text, instead of moving the caret within the visible area.
-    ///
-    /// This behavior is used when:
-    /// 1. Text overflows the visible area (text is longer than area width)
-    /// 2. We're likely deleting from the end (caret moved to the left)
-    /// 3. There's horizontal scroll present
-    fn should_update_horizontal_scroll(
-        &self,
-        text_area_width: f32,
-        old_relative_caret_x: f32,
-        new_absolute_caret_x: f32,
-        current_scroll_x: f32,
-    ) -> bool {
-        // Only apply improved behavior when there's existing scroll
-        if current_scroll_x <= 0.0 {
-            return false;
-        }
-
-        // Calculate approximate text width based on buffer content
-        let text_overflows = self.estimate_text_overflows(text_area_width);
-        if !text_overflows {
-            return false;
-        }
-
-        // Check if caret moved to the left (likely deletion from end)
-        let old_absolute_caret_x = old_relative_caret_x + current_scroll_x;
-
-        // Use improved behavior when text overflows and caret moved left
-        new_absolute_caret_x < old_absolute_caret_x
-    }
-
-    /// Estimates if a text overflows the given width by examining the buffer's layout
-    fn estimate_text_overflows(&self, text_area_width: f32) -> bool {
-        // TODO: check if it's better done with inner_dimensions instead of trying to figure out width
-        // Look at the last glyph position to estimate if text overflows
-        if let Some(line) = &self.buffer.lines.last() {
-            if let Some(layouts) = line.layout_opt().as_ref() {
-                if let Some(layout) = layouts.last() {
-                    if let Some(last_glyph) = layout.glyphs.last() {
-                        let text_width = last_glyph.x + last_glyph.w;
-                        return text_width > text_area_width;
-                    }
-                }
-            }
-        }
-
-        // Fallback: assume no overflow if we can't determine
-        false
     }
 
     /// Reshapes the text buffer if parameters have changed since the last reshape.
