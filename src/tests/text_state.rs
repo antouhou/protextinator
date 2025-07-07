@@ -330,9 +330,7 @@ pub fn test_horizontal_alignment() {
     let expected_x = (container_width - text_width) / 2.0;
     assert!(
         (first_glyph_x - expected_x).abs() < 5.0,
-        "Center-aligned text should start near the center. Expected: {}, Actual: {}",
-        expected_x,
-        first_glyph_x
+        "Center-aligned text should start near the center. Expected: {expected_x}, Actual: {first_glyph_x}"
     );
 
     // Test right alignment
@@ -348,9 +346,8 @@ pub fn test_horizontal_alignment() {
     let text_width = text_state.inner_size().x;
     let first_glyph_x = text_state.first_glyph().unwrap().x;
     let expected_x = container_width - text_width;
-    assert!((first_glyph_x - expected_x).abs() < 5.0, 
-            "Right-aligned text should start near the right edge minus text width. Expected: {}, Actual: {}", 
-            expected_x, first_glyph_x);
+    assert!((first_glyph_x - expected_x).abs() < 5.0,
+            "Right-aligned text should start near the right edge minus text width. Expected: {expected_x}, Actual: {first_glyph_x}");
 }
 
 #[test]
@@ -453,9 +450,7 @@ pub fn test_combined_alignment() {
     let expected_x = (container_width - text_width) / 2.0;
     assert!(
         (first_glyph_x - expected_x).abs() < 5.0,
-        "Horizontally centered text should start at the right position. Expected: {}, Actual: {}",
-        expected_x,
-        first_glyph_x
+        "Horizontally centered text should start at the right position. Expected: {expected_x}, Actual: {first_glyph_x}"
     );
 
     // Test right-bottom alignment
@@ -489,9 +484,7 @@ pub fn test_combined_alignment() {
     let expected_x = container_width - text_width;
     assert!(
         (first_glyph_x - expected_x).abs() < 5.0,
-        "Right-aligned text should start at the right position. Expected: {}, Actual: {}",
-        expected_x,
-        first_glyph_x
+        "Right-aligned text should start at the right position. Expected: {expected_x}, Actual: {first_glyph_x}"
     );
 }
 
@@ -517,9 +510,7 @@ pub fn test_horizontal_overflow() {
     let text_width = text_state.inner_size().x;
     assert!(
         text_width > container_width,
-        "Text should overflow horizontally. Text width: {}, Container width: {}",
-        text_width,
-        container_width
+        "Text should overflow horizontally. Text width: {text_width}, Container width: {container_width}"
     );
 
     // Test with wrapping (should not overflow horizontally)
@@ -534,9 +525,8 @@ pub fn test_horizontal_overflow() {
 
     // Check that text width is close to container width (allow small margin of error)
     let text_width = text_state.inner_size().x;
-    assert!(text_width <= container_width + 2.0, 
-            "Text should not overflow horizontally with wrapping by much. Text width: {}, Container width: {}", 
-            text_width, container_width);
+    assert!(text_width <= container_width + 2.0,
+            "Text should not overflow horizontally with wrapping by much. Text width: {text_width}, Container width: {container_width}");
 }
 
 #[test]
@@ -559,9 +549,7 @@ pub fn test_vertical_overflow() {
     let text_height = text_state.inner_size().y;
     assert!(
         text_height > container_height,
-        "Text should overflow vertically. Text height: {}, Container height: {}",
-        text_height,
-        container_height
+        "Text should overflow vertically. Text height: {text_height}, Container height: {container_height}"
     );
 }
 

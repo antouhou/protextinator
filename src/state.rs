@@ -10,7 +10,7 @@ use crate::buffer_utils::{
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
-use crate::style::{HorizontalTextAlignment, TextStyle, VerticalTextAlignment};
+use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
 use crate::{Point, Rect};
@@ -765,20 +765,7 @@ impl<T> TextState<T> {
         let can_scroll_vertically =
             matches!(self.style().vertical_alignment, VerticalTextAlignment::None);
 
-        let can_scroll_horizontally = matches!(
-            self.style().horizontal_alignment,
-            HorizontalTextAlignment::None
-        );
-        let can_scroll_horizontally = true;
-
-        if !can_scroll_vertically && !can_scroll_horizontally {
-            // If both alignments are set, we cannot scroll
-            return;
-        }
-
-        if can_scroll_horizontally {
-            new_scroll.horizontal = scroll.x;
-        }
+        new_scroll.horizontal = scroll.x;
 
         if can_scroll_vertically {
             let line_height = self.style().line_height_pt();
@@ -951,10 +938,8 @@ impl<T> TextState<T> {
             // If the caret is within the visible text area, we don't need to scroll.
             //  In that case, we should return the old scroll and modify the caret offset
             if is_new_caret_visible {
-                let is_moving_caret_without_updating_the_text = matches!(
-                    update_reason,
-                    UpdateReason::MoveCaret
-                );
+                let is_moving_caret_without_updating_the_text =
+                    matches!(update_reason, UpdateReason::MoveCaret);
                 if !is_moving_caret_without_updating_the_text {
                     let text_shift = old_absolute_caret_x - new_absolute_caret_offset;
 
