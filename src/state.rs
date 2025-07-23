@@ -994,7 +994,7 @@ impl<T> TextState<T> {
 
     fn copy_selected_text(&mut self) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("");
-        ActionResult::InsertToClipboard(selected_text.to_string())
+        ActionResult::TextCopied(selected_text.to_string())
     }
 
     fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
@@ -1018,7 +1018,7 @@ impl<T> TextState<T> {
         let selected_text = self.selected_text().unwrap_or("").to_string();
         self.remove_selected_text();
         self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
-        ActionResult::InsertToClipboard(selected_text)
+        ActionResult::TextCut(selected_text)
     }
 
     fn delete_selected_text_or_text_before_cursor(
