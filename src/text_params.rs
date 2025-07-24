@@ -87,10 +87,8 @@ impl TextParams {
 
     #[inline(always)]
     pub fn remove_range(&mut self, start: usize, end: usize) {
-        println!("Start: {}, End: {}, Text Length: {}", start, end, self.text.len());
         if start < end && end <= self.text.len() {
             self.text.drain(start..end);
-            println!("Self.text after drain: {}", self.text);
             self.changed = true;
         }
     }
