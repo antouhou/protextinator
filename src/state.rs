@@ -280,7 +280,7 @@ impl<T> TextState<T> {
 
         // TODO: should we just reset cursor on whole text update?
         if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
-            if text.len() == 0 {
+            if text.is_empty() {
                 self.cursor = ByteCursor::default()
             } else {
                 self.update_cursor_before_glyph_with_bytes_offset(
