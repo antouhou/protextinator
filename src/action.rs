@@ -47,7 +47,9 @@ pub enum ActionResult {
     /// The text content was modified.
     TextChanged,
     /// Text should be inserted into the system clipboard.
-    InsertToClipboard(String),
+    TextCopied(String),
+    /// Text should be inserted into the system clipboard, and the original text was cut.
+    TextCut(String),
     /// Actions are disabled for this text state.
     ActionsDisabled,
 }

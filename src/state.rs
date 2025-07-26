@@ -278,10 +278,15 @@ impl<T> TextState<T> {
     pub fn set_text(&mut self, text: &str) {
         self.params.set_text(text);
 
+        // TODO: should we just reset cursor on whole text update?
         if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
-            self.update_cursor_before_glyph_with_bytes_offset(
-                self.params.text_for_internal_use().len(),
-            );
+            if text.is_empty() {
+                self.cursor = ByteCursor::default()
+            } else {
+                self.update_cursor_before_glyph_with_bytes_offset(
+                    self.params.text_for_internal_use().len(),
+                );
+            }
         }
     }
 
@@ -994,7 +999,7 @@ impl<T> TextState<T> {
 
     fn copy_selected_text(&mut self) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("");
-        ActionResult::InsertToClipboard(selected_text.to_string())
+        ActionResult::TextCopied(selected_text.to_string())
     }
 
     fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
@@ -1018,7 +1023,7 @@ impl<T> TextState<T> {
         let selected_text = self.selected_text().unwrap_or("").to_string();
         self.remove_selected_text();
         self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
-        ActionResult::InsertToClipboard(selected_text)
+        ActionResult::TextCut(selected_text)
     }
 
     fn delete_selected_text_or_text_before_cursor(

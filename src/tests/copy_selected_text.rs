@@ -23,7 +23,7 @@ pub fn test_copy_empty_selection() {
 
     // Try to copy with no selection
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
-    assert!(matches!(result, ActionResult::InsertToClipboard(s) if s.is_empty()));
+    assert!(matches!(result, ActionResult::TextCopied(s) if s.is_empty()));
 }
 
 #[test]
@@ -51,7 +51,7 @@ pub fn test_copy_partial_selection() {
 
     // Copy the selected text
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
-    assert!(matches!(result, ActionResult::InsertToClipboard(s) if s == "Hello"));
+    assert!(matches!(result, ActionResult::TextCopied(s) if s == "Hello"));
 }
 
 #[test]
@@ -77,8 +77,8 @@ pub fn test_copy_full_selection() {
     // Copy the selected text
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
     match result {
-        ActionResult::InsertToClipboard(s) => assert_eq!(s, "Hello World"),
-        _ => panic!("Result is {result:?}, expected InsertToClipboard"),
+        ActionResult::TextCopied(s) => assert_eq!(s, "Hello World"),
+        _ => panic!("Result is {result:?}, expected TextCopied"),
     }
 }
 
@@ -107,7 +107,7 @@ pub fn test_copy_cyrillic_text() {
 
     // Copy the selected text
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
-    assert!(matches!(result, ActionResult::InsertToClipboard(s) if s == "Привет"));
+    assert!(matches!(result, ActionResult::TextCopied(s) if s == "Привет"));
 }
 
 #[test]
@@ -140,7 +140,7 @@ pub fn test_copy_after_editing() {
 
     // Copy the selected text
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
-    assert!(matches!(result, ActionResult::InsertToClipboard(s) if s == "Test "));
+    assert!(matches!(result, ActionResult::TextCopied(s) if s == "Test "));
 }
 
 #[test]
@@ -199,5 +199,5 @@ pub fn test_copy_selection_from_middle() {
     let result = text_state.apply_action(&mut ctx, &Action::CopySelectedText);
 
     // Verify the copy operation was successful and copied the correct text
-    assert!(matches!(result, ActionResult::InsertToClipboard(s) if s == "bro"));
+    assert!(matches!(result, ActionResult::TextCopied(s) if s == "bro"));
 }

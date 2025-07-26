@@ -164,7 +164,7 @@ pub(crate) fn update_buffer(
                 font_system,
                 text_style.font_size.value(),
                 Some(buffer_measurement.x),
-                text_style.wrap.unwrap_or_default().into(),
+                wrap.into(),
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,

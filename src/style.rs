@@ -375,6 +375,12 @@ pub enum HorizontalTextAlignment {
     Justify,
 }
 
+impl HorizontalTextAlignment {
+    pub fn is_centered(&self) -> bool {
+        matches!(self, HorizontalTextAlignment::Center)
+    }
+}
+
 impl From<HorizontalTextAlignment> for Option<Align> {
     /// Converts a `TextAlignment` to a [`cosmic_text::Align`] option.
     ///
