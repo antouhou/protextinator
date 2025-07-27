@@ -458,7 +458,7 @@ impl TextStyle {
         wrap: None,
         font_family: FontFamily::SansSerif,
     };
-    
+
     /// Creates a new `TextStyle` with the specified font size and color.
     ///
     /// Other properties are set to their default values.
