@@ -30,10 +30,16 @@ pub enum TextWrap {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LineHeight(pub f32);
 
+const DEFAULT_LINE_HEIGHT: f32 = 1.5;
+
+impl LineHeight {
+    pub const DEFAULT: Self = Self(DEFAULT_LINE_HEIGHT);
+}
+
 impl Default for LineHeight {
     /// Returns a default line height of 1.5.
     fn default() -> Self {
-        Self(1.5)
+        Self::DEFAULT
     }
 }
 
@@ -438,19 +444,21 @@ impl Default for TextStyle {
     /// - No text wrapping
     /// - Sans-serif font family
     fn default() -> Self {
-        Self {
-            font_size: FontSize(16.0),
-            line_height: LineHeight::default(),
-            font_color: FontColor(Color::rgb(255, 255, 255)),
-            horizontal_alignment: HorizontalTextAlignment::Start,
-            vertical_alignment: VerticalTextAlignment::Start,
-            wrap: None,
-            font_family: FontFamily::SansSerif,
-        }
+        Self::DEFAULT
     }
 }
 
 impl TextStyle {
+    pub const DEFAULT: Self = Self {
+        font_size: FontSize(16.0),
+        line_height: LineHeight::DEFAULT,
+        font_color: FontColor(Color::rgb(255, 255, 255)),
+        horizontal_alignment: HorizontalTextAlignment::Start,
+        vertical_alignment: VerticalTextAlignment::Start,
+        wrap: None,
+        font_family: FontFamily::SansSerif,
+    };
+    
     /// Creates a new `TextStyle` with the specified font size and color.
     ///
     /// Other properties are set to their default values.
