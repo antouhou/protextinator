@@ -467,9 +467,9 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "easy-tree"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b81fe01e50aceec379af69772402529cfba1a5d53266b0bace467811e395b4f"
+checksum = "05fda4988f15130ba24748b5d359fcd2f588a0896b2f4c6947ce36b3f779e496"
 
 [[package]]
 name = "env_filter"
@@ -809,16 +809,14 @@ dependencies = [
 
 [[package]]
 name = "grafo"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24959ca18babe742a401befb3af2e2e2bfa3fecc0c23c8722d17e981ea0f044e"
+version = "0.8.1"
 dependencies = [
  "ahash",
  "bytemuck",
  "easy-tree",
  "glyphon",
  "log",
- "lru 0.14.0",
+ "lru 0.15.0",
  "lyon",
  "wgpu",
 ]
@@ -1043,9 +1041,9 @@ checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
 
 [[package]]
 name = "lru"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
+checksum = "0281c2e25e62316a5c9d98f2d2e9e95a37841afdaf4383c177dbb5c1dfab0568"
 dependencies = [
  "hashbrown",
 ]

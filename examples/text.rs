@@ -22,6 +22,8 @@ struct App<'a> {
     text_content: String,
     cursor_position: usize,
     text_manager: TextManager,
+    // Texture id for the rendered text for the renderer
+    text_texture_id: u64,
 }
 
 impl<'a> Default for App<'a> {
@@ -39,6 +41,7 @@ impl<'a> App<'a> {
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
             text_manager: TextManager::new(),
+            text_texture_id: 123,
         }
     }
     fn setup_renderer(&mut self, event_loop: &ActiveEventLoop) {
@@ -151,16 +154,51 @@ impl<'a> App<'a> {
                     max: (text_rect.max.x, text_rect.max.y).into(),
                 };
 
+                let text_area_size = text_area.size();
+
+                // TODO: move to into the app initialization, not each frame
+                let mut texture = vec![0u8; (text_area_size.width as u32 * text_area_size.height as u32 * 4) as usize];
+
+                rasterize_text_into_pixels(
+                    self.font_system.as_mut().unwrap(),
+                    &mut self.text_manager.text_context.swash_cache,
+                    renderer.scale_factor() as f32,
+                    (text_area_size.width, text_area_size.height),
+                    &mut texture,
+                    (text_area_size.width as u32, text_area_size.height as u32),
+                );
+
+                // TODO: don't allocate each frame, only reallocate when text area size changes
+                renderer.texture_manager().allocate_texture_with_data(
+                    self.text_texture_id,
+                    (text_area_size.width as u32, text_area_size.height as u32),
+                    &texture
+                );
+
+                // TODO: cache shapes
+                let text_shape_id = renderer.add_shape(
+                    Shape::rect(
+                        [(0.0, 0.0), (text_area_size.width, text_area_size.height)],
+                        Color::TRANSPARENT,
+                        Stroke::new(0.0, Color::TRANSPARENT),
+                    ),
+                    None,
+                    (text_rect.min.x, text_rect.min.y),
+                    // TODO: that's not an actual cache key, but it's fine for now
+                    Some(self.text_texture_id),
+                );
+
+                renderer.set_shape_texture(text_shape_id, Some(self.text_texture_id));
                 // Use grafo's add_text_buffer with protextinator's shaped buffer
                 // This is the perfect integration of both libraries!
-                renderer.add_text_buffer(
-                    buffer,                    // The cosmic-text buffer from protextinator
-                    text_area,                 // Area to render in
-                    Color::rgb(229, 229, 229), // Fallback color
-                    0.0,                       // Vertical offset
-                    text_id.0 as usize,        // Buffer ID (must match the metadata in buffer)
-                    None,                      // No clipping
-                );
+                // renderer.add_text_buffer(
+                //     buffer,                    // The cosmic-text buffer from protextinator
+                //     text_area,                 // Area to render in
+                //     Color::rgb(229, 229, 229), // Fallback color
+                //     0.0,                       // Vertical offset
+                //     text_id.0 as usize,        // Buffer ID (must match the metadata in buffer)
+                //     None,                      // No clipping
+                // );
             }
 
             // Add a simple cursor indicator
@@ -223,14 +261,15 @@ impl<'a> App<'a> {
                         max: (stats_rect.max.x, stats_rect.max.y).into(),
                     };
 
-                    renderer.add_text_buffer(
-                        stats_buffer,
-                        stats_area,
-                        Color::rgb(97, 175, 239),
-                        0.0,
-                        stats_id.0 as usize,
-                        None,
-                    );
+                    // TODO: fix dis, load text the same way as main text using a texture
+                    // renderer.add_text_buffer(
+                    //     stats_buffer,
+                    //     stats_area,
+                    //     Color::rgb(97, 175, 239),
+                    //     0.0,
+                    //     stats_id.0 as usize,
+                    //     None,
+                    // );
                 }
             }
 
@@ -316,6 +355,95 @@ impl<'a> ApplicationHandler for App<'a> {
             window.request_redraw();
         }
     }
+}
+
+fn rasterize_text_into_pixels(
+    font_system: &mut cosmic_text::FontSystem,
+    swash_cache: &mut cosmic_text::SwashCache,
+    scale_factor: f32,
+    logical_size: (f32, f32),
+    pixels: &mut [u8], // RGBA8 sRGB
+    dims: (u32, u32),
+) {
+    let (tex_w, tex_h) = dims;
+    debug_assert_eq!(pixels.len(), (tex_w * tex_h * 4) as usize);
+
+    // Clear to transparent
+    for px in pixels.chunks_exact_mut(4) {
+        px[0] = 0;
+        px[1] = 0;
+        px[2] = 0;
+        px[3] = 0;
+    }
+
+    // Create and shape the buffer
+    let font_size = 24.0;
+    let line_height = 1.4 * font_size;
+    let metrics = cosmic_text::Metrics::new(font_size, line_height);
+    let mut buffer = cosmic_text::Buffer::new(font_system, metrics);
+
+    let text = "Text-to-texture via cosmic_text::Buffer\nWith CPU raster + premultiplied alpha";
+    buffer.set_wrap(font_system, cosmic_text::Wrap::Word);
+    buffer.set_text(
+        font_system,
+        text,
+        &cosmic_text::Attrs::new()
+            .family(cosmic_text::Family::SansSerif)
+            .color(cosmic_text::Color::rgb(255, 255, 255)),
+        cosmic_text::Shaping::Advanced,
+    );
+
+    // Buffer size is in device pixels, so scale logical size by scale factor
+    buffer.set_size(
+        font_system,
+        Some(logical_size.0 * scale_factor),
+        Some(logical_size.1 * scale_factor),
+    );
+    buffer.shape_until_scroll(font_system, true);
+
+    // Use Buffer::draw to iterate painted rects and alpha-blend into our pixel buffer
+    // Base color is white; spans can still carry their own colors if set
+    let base_color = cosmic_text::Color::rgb(255, 255, 255);
+    buffer.draw(font_system, swash_cache, base_color, |x, y, w, h, color| {
+        // Clip to buffer bounds
+        let (x0, y0) = (x.max(0) as u32, y.max(0) as u32);
+        let mut w = w;
+        let mut h = h;
+        if x0 >= tex_w || y0 >= tex_h || w == 0 || h == 0 {
+            return;
+        }
+        if x0 + w > tex_w {
+            w = tex_w - x0;
+        }
+        if y0 + h > tex_h {
+            h = tex_h - y0;
+        }
+
+        let [r, g, b, a] = color.as_rgba();
+        let src_a = a as f32 / 255.0;
+        for row in 0..h {
+            let dst_row_start = ((y0 + row) * tex_w * 4 + x0 * 4) as usize;
+            let row_slice = &mut pixels[dst_row_start..dst_row_start + (w as usize) * 4];
+            for px in row_slice.chunks_exact_mut(4) {
+                let dst_r = px[0] as f32 / 255.0;
+                let dst_g = px[1] as f32 / 255.0;
+                let dst_b = px[2] as f32 / 255.0;
+                let dst_a = px[3] as f32 / 255.0;
+
+                // Straight alpha blend in sRGB space (good enough for example)
+                let out_a = src_a + dst_a * (1.0 - src_a);
+                let inv = if out_a > 0.0 { 1.0 - src_a } else { 0.0 };
+                let out_r = (r as f32 / 255.0) * src_a + dst_r * inv;
+                let out_g = (g as f32 / 255.0) * src_a + dst_g * inv;
+                let out_b = (b as f32 / 255.0) * src_a + dst_b * inv;
+
+                px[0] = (out_r.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                px[1] = (out_g.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                px[2] = (out_b.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                px[3] = (out_a.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+            }
+        }
+    });
 }
 
 fn main() {

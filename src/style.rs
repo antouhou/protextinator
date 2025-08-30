@@ -324,7 +324,7 @@ impl FontFamily {
     /// Converts this font family to a [`cosmic_text::Family`] for use with the text engine.
     ///
     /// This is used internally by the text rendering system.
-    pub fn to_fontdb_family(&self) -> Family {
+    pub fn to_fontdb_family(&self) -> Family<'_> {
         match self {
             FontFamily::Name(a) => Family::Name(a),
             FontFamily::SansSerif => Family::SansSerif,
