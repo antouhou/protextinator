@@ -185,6 +185,21 @@ impl<TMetadata> TextManager<TMetadata> {
             state.set_scale_factor(scale);
         }
     }
+
+    /// Rasterizes all text states into CPU-side RGBA textures and stores them in the states.
+    ///
+    /// This will recalculate the shaping/layout if needed prior to rasterization.
+    /// Currently runs on a single thread; the API is designed to be easily parallelized later.
+    pub fn rasterize_all_textures(&mut self) {
+        // In the future this can be parallelized by splitting the states into chunks and
+        // creating per-thread SwashCache/FontSystem references as needed.
+        for (_id, state) in self.text_states.iter_mut() {
+            // Ensure buffer is up to date
+            state.recalculate(&mut self.text_context);
+            // Rasterize into the state's texture storage
+            state.rasterize_into_texture(&mut self.text_context);
+        }
+    }
 }
 
 impl TextContext {

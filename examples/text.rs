@@ -4,7 +4,7 @@ use protextinator::style::{
     FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
     VerticalTextAlignment,
 };
-use protextinator::{cosmic_text::FontSystem, Id, Point, Rect, TextManager};
+use protextinator::{Id, Point, Rect, TextManager};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
@@ -19,7 +19,6 @@ use winit::{
 struct App<'a> {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer<'a>>,
-    font_system: Option<FontSystem>,
     text_content: String,
     cursor_position: usize,
     text_manager: TextManager,
@@ -40,7 +39,6 @@ impl<'a> App<'a> {
         Self {
             window: None,
             renderer: None,
-            font_system: None,
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
             text_manager: TextManager::new(),
@@ -74,12 +72,8 @@ impl<'a> App<'a> {
 
         // Renderer receives the initial scale factor at creation time.
 
-        // Initialize text systems
-        let font_system = FontSystem::new();
-
         self.window = Some(window);
         self.renderer = Some(renderer);
-        self.font_system = Some(font_system);
         // Ensure text manager uses the same scale factor for shaping
         if let Some(r) = self.renderer.as_ref() {
             self.text_manager.set_scale_factor(r.scale_factor() as f32);
@@ -157,79 +151,6 @@ impl<'a> App<'a> {
                 text_state.set_style(&text_style);
                 text_state.set_buffer_metadata(text_id.0 as usize);
                 text_state.recalculate(&mut self.text_manager.text_context);
-
-                // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
-                let _buffer = &text_state.buffer();
-                // Define the area where the text should be rendered
-                let text_area = MathRect {
-                    min: (text_rect.min.x, text_rect.min.y).into(),
-                    max: (text_rect.max.x, text_rect.max.y).into(),
-                };
-
-                let text_area_size = text_area.size();
-                let scale_factor = renderer.scale_factor() as f32;
-                // Use device-pixel dimensions for the texture to avoid blurriness on HiDPI
-                let texture_dimensions = (
-                    (text_area_size.width * scale_factor).ceil() as u32,
-                    (text_area_size.height * scale_factor).ceil() as u32,
-                );
-
-                // Allocate or reallocate the texture only when size changes
-                if self.text_texture_dimenstions != Some(texture_dimensions) {
-                    renderer
-                        .texture_manager()
-                        .allocate_texture(self.text_texture_id, texture_dimensions);
-                    self.text_texture_dimenstions = Some(texture_dimensions);
-                }
-
-                // Rasterize into a CPU buffer every frame (to measure rasterization cost)
-                let mut texture =
-                    vec![0u8; (texture_dimensions.0 * texture_dimensions.1 * 4) as usize];
-
-                let t_raster_start = Instant::now();
-                rasterize_text_into_pixels(
-                    self.font_system.as_mut().unwrap(),
-                    &mut self.text_manager.text_context.swash_cache,
-                    // Buffer is already shaped in device pixels; no draw-time scaling
-                    1.0,
-                    (text_area_size.width, text_area_size.height),
-                    &mut texture,
-                    texture_dimensions,
-                    &text_state.buffer(),
-                );
-                let raster_time = t_raster_start.elapsed();
-
-                let t_upload_start = Instant::now();
-                match renderer.texture_manager().load_data_into_texture(
-                    self.text_texture_id,
-                    texture_dimensions,
-                    &texture,
-                ) {
-                    Ok(_) => {}
-                    Err(err) => eprintln!("Failed to load text texture data: {err:?}"),
-                }
-                let upload_time = t_upload_start.elapsed();
-
-                println!(
-                    "rasterize: {} µs, load_texture: {} µs",
-                    raster_time.as_micros(),
-                    upload_time.as_micros()
-                );
-
-                // TODO: cache shapes
-                let text_shape_id = renderer.add_shape(
-                    Shape::rect(
-                        [(0.0, 0.0), (text_area_size.width, text_area_size.height)],
-                        Color::TRANSPARENT,
-                        Stroke::new(0.0, Color::TRANSPARENT),
-                    ),
-                    None,
-                    (text_rect.min.x, text_rect.min.y),
-                    // TODO: that's not an actual cache key, but it's fine for now
-                    Some(self.text_texture_id),
-                );
-
-                renderer.set_shape_texture(text_shape_id, Some(self.text_texture_id));
             }
 
             // Add a simple cursor indicator
@@ -292,7 +213,7 @@ impl<'a> App<'a> {
                         max: (stats_rect.max.x, stats_rect.max.y).into(),
                     };
 
-                    // TODO: fix dis, load text the same way as main text using a texture
+                    // TODO: in future, draw stats using a separate texture as well
                     // renderer.add_text_buffer(
                     //     stats_buffer,
                     //     stats_area,
@@ -301,6 +222,64 @@ impl<'a> App<'a> {
                     //     stats_id.0 as usize,
                     //     None,
                     // );
+                }
+            }
+
+            // Rasterize all text states into CPU textures
+            let t_raster_start = Instant::now();
+            self.text_manager.rasterize_all_textures();
+            let raster_time = t_raster_start.elapsed();
+
+            // Upload main text texture and draw
+            if let Some(text_state) = self.text_manager.text_states.get(&text_id) {
+                if let Some(rt) = text_state.rasterized_texture() {
+                    let text_area_size = MathRect {
+                        min: (text_rect.min.x, text_rect.min.y).into(),
+                        max: (text_rect.max.x, text_rect.max.y).into(),
+                    }
+                    .size();
+
+                    let texture_dimensions = (rt.width, rt.height);
+
+                    // Allocate or reallocate the texture only when size changes
+                    if self.text_texture_dimenstions != Some(texture_dimensions) {
+                        renderer
+                            .texture_manager()
+                            .allocate_texture(self.text_texture_id, texture_dimensions);
+                        self.text_texture_dimenstions = Some(texture_dimensions);
+                    }
+
+                    let t_upload_start = Instant::now();
+                    match renderer.texture_manager().load_data_into_texture(
+                        self.text_texture_id,
+                        texture_dimensions,
+                        &rt.pixels,
+                    ) {
+                        Ok(_) => {}
+                        Err(err) => eprintln!("Failed to load text texture data: {err:?}"),
+                    }
+                    let upload_time = t_upload_start.elapsed();
+
+                    println!(
+                        "rasterize: {} µs, load_texture: {} µs",
+                        raster_time.as_micros(),
+                        upload_time.as_micros()
+                    );
+
+                    // TODO: cache shapes
+                    let text_shape_id = renderer.add_shape(
+                        Shape::rect(
+                            [(0.0, 0.0), (text_area_size.width, text_area_size.height)],
+                            Color::TRANSPARENT,
+                            Stroke::new(0.0, Color::TRANSPARENT),
+                        ),
+                        None,
+                        (text_rect.min.x, text_rect.min.y),
+                        // TODO: that's not an actual cache key, but it's fine for now
+                        Some(self.text_texture_id),
+                    );
+
+                    renderer.set_shape_texture(text_shape_id, Some(self.text_texture_id));
                 }
             }
 
@@ -410,73 +389,7 @@ impl<'a> ApplicationHandler for App<'a> {
     }
 }
 
-fn rasterize_text_into_pixels(
-    font_system: &mut cosmic_text::FontSystem,
-    swash_cache: &mut cosmic_text::SwashCache,
-    _scale_factor: f32,
-    _logical_size: (f32, f32),
-    pixels: &mut [u8], // RGBA8 sRGB
-    dimensions: (u32, u32),
-    buffer: &cosmic_text::Buffer,
-) {
-    let (tex_w, tex_h) = dimensions;
-    debug_assert_eq!(pixels.len(), (tex_w * tex_h * 4) as usize);
-
-    // Clear to transparent
-    for px in pixels.chunks_exact_mut(4) {
-        px[0] = 0;
-        px[1] = 0;
-        px[2] = 0;
-        px[3] = 0;
-    }
-
-    // Note: We do not modify, clone, or create buffers here; we only draw using the provided one.
-    // For best sharpness, ensure the provided buffer is shaped for device pixels upstream.
-
-    // Use Buffer::draw to iterate painted rects and alpha-blend into our pixel buffer
-    // Base color is white; spans can still carry their own colors if set
-    let base_color = cosmic_text::Color::rgb(255, 255, 255);
-    buffer.draw(font_system, swash_cache, base_color, |x, y, w, h, color| {
-        // Clip to buffer bounds
-        let (x0, y0) = ((x as u32).min(tex_w), (y as u32).min(tex_h));
-        let mut w = w as u32;
-        let mut h = h as u32;
-        if x0 >= tex_w || y0 >= tex_h || w == 0 || h == 0 {
-            return;
-        }
-        if x0 + w > tex_w {
-            w = tex_w - x0;
-        }
-        if y0 + h > tex_h {
-            h = tex_h - y0;
-        }
-
-        let [r, g, b, a] = color.as_rgba();
-        let src_a = a as f32 / 255.0;
-        for row in 0..h {
-            let dst_row_start = ((y0 + row) * tex_w * 4 + x0 * 4) as usize;
-            let row_slice = &mut pixels[dst_row_start..dst_row_start + (w as usize) * 4];
-            for px in row_slice.chunks_exact_mut(4) {
-                let dst_r = px[0] as f32 / 255.0;
-                let dst_g = px[1] as f32 / 255.0;
-                let dst_b = px[2] as f32 / 255.0;
-                let dst_a = px[3] as f32 / 255.0;
-
-                // Straight alpha blend in sRGB space (good enough for example)
-                let out_a = src_a + dst_a * (1.0 - src_a);
-                let inv = if out_a > 0.0 { 1.0 - src_a } else { 0.0 };
-                let out_r = (r as f32 / 255.0) * src_a + dst_r * inv;
-                let out_g = (g as f32 / 255.0) * src_a + dst_g * inv;
-                let out_b = (b as f32 / 255.0) * src_a + dst_b * inv;
-
-                px[0] = (out_r.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                px[1] = (out_g.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                px[2] = (out_b.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                px[3] = (out_a.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-            }
-        }
-    });
-}
+// Local rasterizer removed; textures are produced by TextManager
 
 fn main() {
     env_logger::init();

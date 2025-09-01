@@ -23,6 +23,14 @@ use std::time::{Duration, Instant};
 /// Size comparison epsilon for floating-point calculations.
 pub const SIZE_EPSILON: f32 = 0.0001;
 
+/// CPU-side RGBA8 texture holding the rasterized contents of a text buffer.
+#[derive(Debug, Clone)]
+pub struct RasterizedTexture {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// Represents a single line of text selection with visual boundaries.
 ///
 /// Selection lines define the visual appearance of selected text, with start and end
@@ -110,6 +118,9 @@ pub struct TextState<T> {
     inner_dimensions: Size,
     buffer: Buffer,
 
+    // CPU-side cached rasterized texture of the current buffer (RGBA8, device pixels)
+    rasterized_texture: Option<RasterizedTexture>,
+
     // Settings
     /// Can text be selected?
     pub is_selectable: bool,
@@ -178,6 +189,8 @@ impl<T> TextState<T> {
 
             inner_dimensions: Size::ZERO,
             buffer: Buffer::new(font_system, metrics),
+
+            rasterized_texture: None,
 
             metadata,
         }
@@ -453,6 +466,11 @@ impl<T> TextState<T> {
     /// ```
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
+    }
+
+    /// Returns the last rasterized CPU texture if available.
+    pub fn rasterized_texture(&self) -> Option<&RasterizedTexture> {
+        self.rasterized_texture.as_ref()
     }
 
     /// Returns the length of the text in characters. Note that this is different from the
@@ -995,6 +1013,107 @@ impl<T> TextState<T> {
             self.inner_dimensions = new_size;
             self.params.reset_changed();
         }
+    }
+
+    /// Rasterizes the current text buffer into an RGBA8 CPU texture using device-pixel dimensions.
+    ///
+    /// Returns true if rasterization was performed (and texture updated), false if skipped
+    /// (e.g., zero-sized target).
+    pub(crate) fn rasterize_into_texture(&mut self, ctx: &mut TextContext) -> bool {
+        // Compute device-pixel texture size from the logical outer size and scale factor
+        let size = self.outer_size();
+        let scale = ctx.scale_factor.max(0.01);
+        let width = (size.x * scale).ceil().max(0.0) as u32;
+        let height = (size.y * scale).ceil().max(0.0) as u32;
+        if width == 0 || height == 0 {
+            self.rasterized_texture = None;
+            return false;
+        }
+
+        let required_len = width as usize * height as usize * 4;
+        // Reuse allocation if dimensions match
+        let mut pixels = if let Some(rt) = &mut self.rasterized_texture {
+            if rt.width == width && rt.height == height {
+                // Clear existing buffer to transparent before drawing
+                for px in rt.pixels.chunks_exact_mut(4) {
+                    px[0] = 0;
+                    px[1] = 0;
+                    px[2] = 0;
+                    px[3] = 0;
+                }
+                std::mem::take(&mut rt.pixels)
+            } else {
+                vec![0u8; required_len]
+            }
+        } else {
+            vec![0u8; required_len]
+        };
+
+        // Safety check for size
+        if pixels.len() != required_len {
+            pixels.resize(required_len, 0);
+        }
+
+        // Clear to transparent
+        for px in pixels.chunks_exact_mut(4) {
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
+            px[3] = 0;
+        }
+
+        let base_color = cosmic_text::Color::rgb(255, 255, 255);
+        let tex_w = width;
+        let tex_h = height;
+        self.buffer
+            .draw(&mut ctx.font_system, &mut ctx.swash_cache, base_color, |x, y, w, h, color| {
+                // Clip to buffer bounds
+                let (x0, y0) = ((x as u32).min(tex_w), (y as u32).min(tex_h));
+                let mut w = w as u32;
+                let mut h = h as u32;
+                if x0 >= tex_w || y0 >= tex_h || w == 0 || h == 0 {
+                    return;
+                }
+                if x0 + w > tex_w {
+                    w = tex_w - x0;
+                }
+                if y0 + h > tex_h {
+                    h = tex_h - y0;
+                }
+
+                let [r, g, b, a] = color.as_rgba();
+                let src_a = a as f32 / 255.0;
+                for row in 0..h {
+                    let dst_row_start = ((y0 + row) * tex_w * 4 + x0 * 4) as usize;
+                    let row_slice = &mut pixels[dst_row_start..dst_row_start + (w as usize) * 4];
+                    for px in row_slice.chunks_exact_mut(4) {
+                        let dst_r = px[0] as f32 / 255.0;
+                        let dst_g = px[1] as f32 / 255.0;
+                        let dst_b = px[2] as f32 / 255.0;
+                        let dst_a = px[3] as f32 / 255.0;
+
+                        let out_a = src_a + dst_a * (1.0 - src_a);
+                        let inv = if out_a > 0.0 { 1.0 - src_a } else { 0.0 };
+                        let out_r = (r as f32 / 255.0) * src_a + dst_r * inv;
+                        let out_g = (g as f32 / 255.0) * src_a + dst_g * inv;
+                        let out_b = (b as f32 / 255.0) * src_a + dst_b * inv;
+
+                        px[0] = (out_r.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                        px[1] = (out_g.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                        px[2] = (out_b.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                        px[3] = (out_a.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                    }
+                }
+            });
+
+        // Store/replace texture
+        self.rasterized_texture = Some(RasterizedTexture {
+            pixels,
+            width,
+            height,
+        });
+
+        true
     }
 
     /// Updates the internal scale factor in params; will trigger reshape on next recalc if changed.
