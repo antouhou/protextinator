@@ -232,7 +232,8 @@ impl<'a> App<'a> {
 
             // Upload main text texture and draw
             if let Some(text_state) = self.text_manager.text_states.get(&text_id) {
-                if let Some(rt) = text_state.rasterized_texture() {
+                let rt = text_state.rasterized_texture();
+                if rt.width > 0 && rt.height > 0 {
                     let text_area_size = MathRect {
                         min: (text_rect.min.x, text_rect.min.y).into(),
                         max: (text_rect.max.x, text_rect.max.y).into(),

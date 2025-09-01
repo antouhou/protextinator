@@ -119,7 +119,9 @@ pub struct TextState<T> {
     buffer: Buffer,
 
     // CPU-side cached rasterized texture of the current buffer (RGBA8, device pixels)
-    rasterized_texture: Option<RasterizedTexture>,
+    rasterized_texture: RasterizedTexture,
+    // Whether raster content needs to be regenerated
+    raster_dirty: bool,
 
     // Settings
     /// Can text be selected?
@@ -190,7 +192,8 @@ impl<T> TextState<T> {
             inner_dimensions: Size::ZERO,
             buffer: Buffer::new(font_system, metrics),
 
-            rasterized_texture: None,
+            rasterized_texture: RasterizedTexture { pixels: Vec::new(), width: 0, height: 0 },
+            raster_dirty: true,
 
             metadata,
         }
@@ -468,9 +471,9 @@ impl<T> TextState<T> {
         &self.buffer
     }
 
-    /// Returns the last rasterized CPU texture if available.
-    pub fn rasterized_texture(&self) -> Option<&RasterizedTexture> {
-        self.rasterized_texture.as_ref()
+    /// Returns the last rasterized CPU texture.
+    pub fn rasterized_texture(&self) -> &RasterizedTexture {
+        &self.rasterized_texture
     }
 
     /// Returns the length of the text in characters. Note that this is different from the
@@ -818,7 +821,16 @@ impl<T> TextState<T> {
             new_scroll.vertical = scroll.y - accumulated_height;
         }
 
-        self.buffer.set_scroll(new_scroll);
+        // Apply only if changed
+        let old = self.buffer.scroll();
+        if (old.horizontal - new_scroll.horizontal).abs() > SIZE_EPSILON
+            || (old.vertical - new_scroll.vertical).abs() > SIZE_EPSILON
+            || old.line != new_scroll.line
+        {
+            self.buffer.set_scroll(new_scroll);
+            // Any scroll change requires re-rasterization
+            self.raster_dirty = true;
+        }
     }
 
     /// Calculates physical selection area based on the selection start and end glyph indices
@@ -853,7 +865,6 @@ impl<T> TextState<T> {
                 });
             }
         }
-
         None
     }
 
@@ -917,8 +928,12 @@ impl<T> TextState<T> {
         let text_area_size = self.params.size();
         let vertical_scroll_to_align_text =
             calculate_vertical_offset(self.params.style(), text_area_size, self.inner_dimensions);
-        scroll.vertical = vertical_scroll_to_align_text;
-        self.buffer.set_scroll(scroll);
+        if (scroll.vertical - vertical_scroll_to_align_text).abs() > SIZE_EPSILON {
+            scroll.vertical = vertical_scroll_to_align_text;
+            self.buffer.set_scroll(scroll);
+            // Vertical alignment scroll change affects raster
+            self.raster_dirty = true;
+        }
     }
 
     /// Buffer needs to be shaped before calling this function, as it relies on the buffer's layout
@@ -996,7 +1011,16 @@ impl<T> TextState<T> {
                 // Do nothing?
             }
 
-            self.buffer.set_scroll(new_scroll);
+            // Apply only if changed
+            let old = self.buffer.scroll();
+            if (old.horizontal - new_scroll.horizontal).abs() > SIZE_EPSILON
+                || (old.vertical - new_scroll.vertical).abs() > SIZE_EPSILON
+                || old.line != new_scroll.line
+            {
+                self.buffer.set_scroll(new_scroll);
+                // Scroll changes affect raster
+                self.raster_dirty = true;
+            }
         }
 
         None
@@ -1012,6 +1036,8 @@ impl<T> TextState<T> {
             let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
             self.inner_dimensions = new_size;
             self.params.reset_changed();
+            // Any layout/text/style/size change requires re-rasterization
+            self.raster_dirty = true;
         }
     }
 
@@ -1026,36 +1052,30 @@ impl<T> TextState<T> {
         let width = (size.x * scale).ceil().max(0.0) as u32;
         let height = (size.y * scale).ceil().max(0.0) as u32;
         if width == 0 || height == 0 {
-            self.rasterized_texture = None;
+            // No room to rasterize; clear texture and mark clean
+            self.rasterized_texture.width = 0;
+            self.rasterized_texture.height = 0;
+            self.rasterized_texture.pixels.clear();
+            self.raster_dirty = false;
+            return false;
+        }
+
+        let dims_changed =
+            self.rasterized_texture.width != width || self.rasterized_texture.height != height;
+
+        // Skip if nothing changed and dimensions match
+        if !dims_changed && !self.raster_dirty {
             return false;
         }
 
         let required_len = width as usize * height as usize * 4;
-        // Reuse allocation if dimensions match
-        let mut pixels = if let Some(rt) = &mut self.rasterized_texture {
-            if rt.width == width && rt.height == height {
-                // Clear existing buffer to transparent before drawing
-                for px in rt.pixels.chunks_exact_mut(4) {
-                    px[0] = 0;
-                    px[1] = 0;
-                    px[2] = 0;
-                    px[3] = 0;
-                }
-                std::mem::take(&mut rt.pixels)
-            } else {
-                vec![0u8; required_len]
-            }
-        } else {
-            vec![0u8; required_len]
-        };
-
-        // Safety check for size
-        if pixels.len() != required_len {
-            pixels.resize(required_len, 0);
+        // Ensure capacity and set length; reuse allocation when possible
+        if self.rasterized_texture.pixels.len() != required_len {
+            self.rasterized_texture.pixels.resize(required_len, 0);
         }
 
-        // Clear to transparent
-        for px in pixels.chunks_exact_mut(4) {
+        // Clear to transparent before drawing
+        for px in self.rasterized_texture.pixels.chunks_exact_mut(4) {
             px[0] = 0;
             px[1] = 0;
             px[2] = 0;
@@ -1065,8 +1085,11 @@ impl<T> TextState<T> {
         let base_color = cosmic_text::Color::rgb(255, 255, 255);
         let tex_w = width;
         let tex_h = height;
-        self.buffer
-            .draw(&mut ctx.font_system, &mut ctx.swash_cache, base_color, |x, y, w, h, color| {
+        self.buffer.draw(
+            &mut ctx.font_system,
+            &mut ctx.swash_cache,
+            base_color,
+            |x, y, w, h, color| {
                 // Clip to buffer bounds
                 let (x0, y0) = ((x as u32).min(tex_w), (y as u32).min(tex_h));
                 let mut w = w as u32;
@@ -1085,7 +1108,8 @@ impl<T> TextState<T> {
                 let src_a = a as f32 / 255.0;
                 for row in 0..h {
                     let dst_row_start = ((y0 + row) * tex_w * 4 + x0 * 4) as usize;
-                    let row_slice = &mut pixels[dst_row_start..dst_row_start + (w as usize) * 4];
+                    let row_slice = &mut self.rasterized_texture.pixels
+                        [dst_row_start..dst_row_start + (w as usize) * 4];
                     for px in row_slice.chunks_exact_mut(4) {
                         let dst_r = px[0] as f32 / 255.0;
                         let dst_g = px[1] as f32 / 255.0;
@@ -1104,14 +1128,13 @@ impl<T> TextState<T> {
                         px[3] = (out_a.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
                     }
                 }
-            });
+            },
+        );
 
-        // Store/replace texture
-        self.rasterized_texture = Some(RasterizedTexture {
-            pixels,
-            width,
-            height,
-        });
+        // Update texture dimensions and clear dirty flag
+        self.rasterized_texture.width = width;
+        self.rasterized_texture.height = height;
+        self.raster_dirty = false;
 
         true
     }
