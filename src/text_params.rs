@@ -10,6 +10,9 @@ pub(crate) struct TextParams {
     text: String,
     metadata: usize,
 
+    // Device scale factor; 1.0 == logical pixels
+    scale_factor: f32,
+
     changed: bool,
     line_terminator_has_been_added: bool,
 }
@@ -22,6 +25,7 @@ impl TextParams {
             style,
             text: "".to_string(),
             metadata,
+            scale_factor: 1.0,
 
             changed: true,
             line_terminator_has_been_added: false,
@@ -151,6 +155,23 @@ impl TextParams {
 
     #[inline(always)]
     pub fn metrics(&self) -> Metrics {
-        Metrics::new(self.style().font_size.0, self.style().line_height_pt())
+        let scale = self.scale_factor;
+        let font_size = self.style().font_size.0 * scale;
+        let line_height = self.style().line_height_pt() * scale;
+        Metrics::new(font_size, line_height)
+    }
+
+    #[inline(always)]
+    pub fn set_scale_factor(&mut self, scale: f32) {
+        let scale = scale.max(0.01);
+        if (self.scale_factor - scale).abs() > SIZE_EPSILON {
+            self.scale_factor = scale;
+            self.changed = true;
+        }
+    }
+
+    #[inline(always)]
+    pub fn scale_factor(&self) -> f32 {
+        self.scale_factor
     }
 }

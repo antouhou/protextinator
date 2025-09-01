@@ -997,6 +997,11 @@ impl<T> TextState<T> {
         }
     }
 
+    /// Updates the internal scale factor in params; will trigger reshape on next recalc if changed.
+    pub fn set_scale_factor(&mut self, scale: f32) {
+        self.params.set_scale_factor(scale);
+    }
+
     fn copy_selected_text(&mut self) -> ActionResult {
         let selected_text = self.selected_text().unwrap_or("");
         ActionResult::TextCopied(selected_text.to_string())

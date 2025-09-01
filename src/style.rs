@@ -70,6 +70,8 @@ impl Eq for LineHeight {}
 ///
 /// Font size determines the height of characters in the text.
 /// Typical font sizes range from 8pt to 72pt, with 12pt-16pt being common for body text.
+/// This is a logical size - to apply scaling based on DPI, use [`crate::TextState::set_scale_factor`]
+/// for a specific state, or [`crate::TextManager::set_scale_factor`] to apply it to all states.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FontSize(pub f32);
@@ -339,7 +341,7 @@ impl FontFamily {
 /// Comprehensive text styling configuration.
 ///
 /// `TextStyle` combines all visual aspects of text rendering, including font properties,
-/// colors, alignment and wrapping behavior
+/// colors, alignment, and wrapping behavior
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextStyle {

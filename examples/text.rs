@@ -7,7 +7,6 @@ use protextinator::style::{
 use protextinator::{cosmic_text::FontSystem, Id, Point, Rect, TextManager};
 use std::sync::Arc;
 use std::time::Instant;
-use cosmic_text::Buffer;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -73,7 +72,7 @@ impl<'a> App<'a> {
             false, // transparent
         ));
 
-    // Renderer receives the initial scale factor at creation time.
+        // Renderer receives the initial scale factor at creation time.
 
         // Initialize text systems
         let font_system = FontSystem::new();
@@ -81,6 +80,10 @@ impl<'a> App<'a> {
         self.window = Some(window);
         self.renderer = Some(renderer);
         self.font_system = Some(font_system);
+        // Ensure text manager uses the same scale factor for shaping
+        if let Some(r) = self.renderer.as_ref() {
+            self.text_manager.set_scale_factor(r.scale_factor() as f32);
+        }
     }
 
     fn handle_text_input(&mut self, text: &str) {
@@ -148,6 +151,8 @@ impl<'a> App<'a> {
             // Get the text state and reshape if needed
             if let Some(text_state) = self.text_manager.text_states.get_mut(&text_id) {
                 text_state.set_text(&self.text_content);
+
+                // Keep font sizes and outer sizes in logical pixels. We pass scale to the manager instead.
                 text_state.set_outer_size(&text_rect.size().into());
                 text_state.set_style(&text_style);
                 text_state.set_buffer_metadata(text_id.0 as usize);
@@ -162,9 +167,11 @@ impl<'a> App<'a> {
                 };
 
                 let text_area_size = text_area.size();
+                let scale_factor = renderer.scale_factor() as f32;
+                // Use device-pixel dimensions for the texture to avoid blurriness on HiDPI
                 let texture_dimensions = (
-                    text_area_size.width as u32,
-                    text_area_size.height as u32,
+                    (text_area_size.width * scale_factor).ceil() as u32,
+                    (text_area_size.height * scale_factor).ceil() as u32,
                 );
 
                 // Allocate or reallocate the texture only when size changes
@@ -176,25 +183,28 @@ impl<'a> App<'a> {
                 }
 
                 // Rasterize into a CPU buffer every frame (to measure rasterization cost)
-                let mut texture = vec![0u8; (texture_dimensions.0 * texture_dimensions.1 * 4) as usize];
+                let mut texture =
+                    vec![0u8; (texture_dimensions.0 * texture_dimensions.1 * 4) as usize];
 
                 let t_raster_start = Instant::now();
                 rasterize_text_into_pixels(
                     self.font_system.as_mut().unwrap(),
                     &mut self.text_manager.text_context.swash_cache,
-                    renderer.scale_factor() as f32,
+                    // Buffer is already shaped in device pixels; no draw-time scaling
+                    1.0,
                     (text_area_size.width, text_area_size.height),
                     &mut texture,
                     texture_dimensions,
-                    &text_state.buffer()
+                    &text_state.buffer(),
                 );
                 let raster_time = t_raster_start.elapsed();
 
                 let t_upload_start = Instant::now();
-                match renderer
-                    .texture_manager()
-                    .load_data_into_texture(self.text_texture_id, texture_dimensions, &texture)
-                {
+                match renderer.texture_manager().load_data_into_texture(
+                    self.text_texture_id,
+                    texture_dimensions,
+                    &texture,
+                ) {
                     Ok(_) => {}
                     Err(err) => eprintln!("Failed to load text texture data: {err:?}"),
                 }
@@ -346,6 +356,8 @@ impl<'a> ApplicationHandler for App<'a> {
                         false,
                     ));
                     self.renderer = Some(new_renderer);
+                    // Propagate scale to TextManager so buffers reshape in device pixels
+                    self.text_manager.set_scale_factor(scale_factor as f32);
                     // Force texture reallocation next frame if needed
                     self.text_texture_dimenstions = None;
                     window.request_redraw();
@@ -405,7 +417,7 @@ fn rasterize_text_into_pixels(
     _logical_size: (f32, f32),
     pixels: &mut [u8], // RGBA8 sRGB
     dimensions: (u32, u32),
-    buffer: &Buffer
+    buffer: &cosmic_text::Buffer,
 ) {
     let (tex_w, tex_h) = dimensions;
     debug_assert_eq!(pixels.len(), (tex_w * tex_h * 4) as usize);
@@ -418,14 +430,17 @@ fn rasterize_text_into_pixels(
         px[3] = 0;
     }
 
+    // Note: We do not modify, clone, or create buffers here; we only draw using the provided one.
+    // For best sharpness, ensure the provided buffer is shaped for device pixels upstream.
+
     // Use Buffer::draw to iterate painted rects and alpha-blend into our pixel buffer
     // Base color is white; spans can still carry their own colors if set
     let base_color = cosmic_text::Color::rgb(255, 255, 255);
     buffer.draw(font_system, swash_cache, base_color, |x, y, w, h, color| {
         // Clip to buffer bounds
-        let (x0, y0) = (x.max(0) as u32, y.max(0) as u32);
-        let mut w = w;
-        let mut h = h;
+        let (x0, y0) = ((x as u32).min(tex_w), (y as u32).min(tex_h));
+        let mut w = w as u32;
+        let mut h = h as u32;
         if x0 >= tex_w || y0 >= tex_h || w == 0 || h == 0 {
             return;
         }

@@ -113,13 +113,15 @@ pub(crate) fn update_buffer(
     let metadata = params.metadata();
     let old_scroll = buffer.scroll();
 
+    let scale_factor = params.scale_factor();
     buffer.set_metrics(font_system, params.metrics());
     buffer.set_wrap(font_system, wrap.into());
 
     // Setting vertical size to None means that the buffer will use the height of the text.
     // This is needed to ensue that glyphs can be scrolled vertically by smaller amounts than
     // the line height.
-    buffer.set_size(font_system, Some(text_area_size.x), None);
+    // Apply scale for shaping to device pixels
+    buffer.set_size(font_system, Some(text_area_size.x * scale_factor), None);
 
     buffer.set_text(
         font_system,
@@ -137,8 +139,8 @@ pub(crate) fn update_buffer(
         for layout_line in line
             .layout(
                 font_system,
-                text_style.font_size.value(),
-                Some(text_area_size.x),
+                text_style.font_size.value() * scale_factor,
+                Some(text_area_size.x * scale_factor),
                 text_style.wrap.unwrap_or_default().into(),
                 None,
                 // TODO: what is the default tab width? Make it configurable?
@@ -148,12 +150,12 @@ pub(crate) fn update_buffer(
         {
             buffer_measurement.y += layout_line
                 .line_height_opt
-                .unwrap_or(text_style.line_height_pt());
+                .unwrap_or(text_style.line_height_pt() * scale_factor);
             buffer_measurement.x = buffer_measurement.x.max(layout_line.w);
         }
     }
 
-    if buffer_measurement.x > text_area_size.x {
+    if buffer_measurement.x > text_area_size.x * scale_factor {
         // If the buffer is smaller than the text area, we need to set the width to the text area
         // size to ensure that the text is centered.
         // After we've measured the buffer, we need to run layout() again to realign the lines
@@ -162,7 +164,7 @@ pub(crate) fn update_buffer(
             line.set_align(horizontal_alignment.into());
             line.layout(
                 font_system,
-                text_style.font_size.value(),
+                text_style.font_size.value() * scale_factor,
                 Some(buffer_measurement.x),
                 wrap.into(),
                 None,
@@ -173,5 +175,9 @@ pub(crate) fn update_buffer(
     }
 
     buffer.set_scroll(old_scroll);
-    buffer_measurement
+    // We shaped at device pixels; convert inner_dimensions back to logical for API
+    Size::from((
+        buffer_measurement.x / scale_factor,
+        buffer_measurement.y / scale_factor,
+    ))
 }
