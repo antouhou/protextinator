@@ -129,7 +129,7 @@ impl<'a> App<'a> {
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
+                font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xFF, 0xFF, 0xFF)), // Pure white
                 horizontal_alignment: HorizontalTextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),

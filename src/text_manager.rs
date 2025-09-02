@@ -190,16 +190,41 @@ impl<TMetadata> TextManager<TMetadata> {
     ///
     /// This will recalculate the shaping/layout if needed prior to rasterization.
     /// Currently runs on a single thread; the API is designed to be easily parallelized later.
-    pub fn rasterize_all_textures(&mut self) {
+    pub fn rasterize_all_textures(&mut self) -> Vec<RasterizedTextureInfo> {
         // In the future this can be parallelized by splitting the states into chunks and
         // creating per-thread SwashCache/FontSystem references as needed.
-        for (_id, state) in self.text_states.iter_mut() {
-            // Ensure buffer is up to date
+        let mut changes = Vec::new();
+        for (id, state) in self.text_states.iter_mut() {
+            let old_w = state.rasterized_texture().width;
+            let old_h = state.rasterized_texture().height;
+            // Ensure the buffer is up to date
             state.recalculate(&mut self.text_context);
             // Rasterize into the state's texture storage
-            state.rasterize_into_texture(&mut self.text_context);
+            let rerasterized = state.rasterize_into_texture(&mut self.text_context);
+            if rerasterized {
+                let new_w = state.rasterized_texture().width;
+                let new_h = state.rasterized_texture().height;
+                let resized = new_w != old_w || new_h != old_h;
+                changes.push(RasterizedTextureInfo {
+                    id: *id,
+                    width: new_w,
+                    height: new_h,
+                    resized,
+                });
+            }
         }
+        changes
     }
+}
+
+/// Information about a text state's rasterized texture after `rasterize_all_textures`.
+#[derive(Debug, Clone, Copy)]
+pub struct RasterizedTextureInfo {
+    pub id: Id,
+    pub width: u32,
+    pub height: u32,
+    /// True if the texture dimensions changed compared to the previous rasterization.
+    pub resized: bool,
 }
 
 impl TextContext {
