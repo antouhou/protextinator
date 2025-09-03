@@ -4,7 +4,7 @@ use protextinator::style::{
     FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
     VerticalTextAlignment,
 };
-use protextinator::{Id, Point, Rect, TextManager};
+use protextinator::{AlphaMode, Id, Point, Rect, TextManager};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
@@ -227,7 +227,7 @@ impl<'a> App<'a> {
 
             // Rasterize all text states into CPU textures
             let t_raster_start = Instant::now();
-            self.text_manager.rasterize_all_textures();
+            self.text_manager.rasterize_all_textures(AlphaMode::Premultiplied);
             let raster_time = t_raster_start.elapsed();
 
             // Upload main text texture and draw

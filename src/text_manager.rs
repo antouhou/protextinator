@@ -3,7 +3,7 @@
 //! This module provides high-level management of multiple text states, font loading,
 //! and resource tracking for text rendering systems.
 
-use crate::state::TextState;
+use crate::state::{AlphaMode, TextState};
 use crate::Id;
 use ahash::{HashMap, HashSet, HashSetExt};
 use cosmic_text::{fontdb, FontSystem, SwashCache};
@@ -190,7 +190,7 @@ impl<TMetadata> TextManager<TMetadata> {
     ///
     /// This will recalculate the shaping/layout if needed prior to rasterization.
     /// Currently runs on a single thread; the API is designed to be easily parallelized later.
-    pub fn rasterize_all_textures(&mut self) -> Vec<RasterizedTextureInfo> {
+    pub fn rasterize_all_textures(&mut self, alpha_mode: AlphaMode) -> Vec<RasterizedTextureInfo> {
         // In the future this can be parallelized by splitting the states into chunks and
         // creating per-thread SwashCache/FontSystem references as needed.
         let mut changes = Vec::new();
@@ -200,7 +200,7 @@ impl<TMetadata> TextManager<TMetadata> {
             // Ensure the buffer is up to date
             state.recalculate(&mut self.text_context);
             // Rasterize into the state's texture storage
-            let rerasterized = state.rasterize_into_texture(&mut self.text_context);
+            let rerasterized = state.rasterize_into_texture(&mut self.text_context, alpha_mode);
             if rerasterized {
                 let new_w = state.rasterized_texture().width;
                 let new_h = state.rasterized_texture().height;

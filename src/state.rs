@@ -19,6 +19,7 @@ use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
+use crate::utils::{linear_to_srgb_u8, srgb_to_linear_u8};
 
 /// Size comparison epsilon for floating-point calculations.
 pub const SIZE_EPSILON: f32 = 0.0001;
@@ -1045,7 +1046,7 @@ impl<T> TextState<T> {
     ///
     /// Returns true if rasterization was performed (and texture updated), false if skipped
     /// (e.g., zero-sized target).
-    pub(crate) fn rasterize_into_texture(&mut self, ctx: &mut TextContext) -> bool {
+    pub(crate) fn rasterize_into_texture(&mut self, ctx: &mut TextContext, alpha_mode: AlphaMode) -> bool {
         // Compute device-pixel texture size from the logical outer size and scale factor
         let size = self.outer_size();
         let scale = ctx.scale_factor.max(0.01);
@@ -1082,50 +1083,57 @@ impl<T> TextState<T> {
             px[3] = 0;
         }
 
-        let base_color = cosmic_text::Color::rgb(255, 255, 255);
-        let tex_w = width;
-        let tex_h = height;
+        let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
+        let text_width = width;
+        let text_height = height;
         self.buffer.draw(
             &mut ctx.font_system,
             &mut ctx.swash_cache,
             base_color,
-            |x, y, w, h, color| {
+            |x, y, mut w, mut h, color| {
                 // Clip to buffer bounds
-                let (x0, y0) = ((x as u32).min(tex_w), (y as u32).min(tex_h));
-                let mut w = w as u32;
-                let mut h = h as u32;
-                if x0 >= tex_w || y0 >= tex_h || w == 0 || h == 0 {
+                let (x0, y0) = ((x as u32).min(text_width), (y as u32).min(text_height));
+                if x0 >= text_width || y0 >= text_height || w == 0 || h == 0 {
                     return;
                 }
-                if x0 + w > tex_w {
-                    w = tex_w - x0;
+                if x0 + w > text_width {
+                    w = text_width - x0;
                 }
-                if y0 + h > tex_h {
-                    h = tex_h - y0;
+                if y0 + h > text_height {
+                    h = text_height - y0;
                 }
 
-                let [r, g, b, a] = color.as_rgba();
-                let src_a = a as f32 / 255.0;
                 for row in 0..h {
-                    let dst_row_start = ((y0 + row) * tex_w * 4 + x0 * 4) as usize;
+                    let dst_row_start = ((y0 + row) * text_width * 4 + x0 * 4) as usize;
                     let row_slice = &mut self.rasterized_texture.pixels
                         [dst_row_start..dst_row_start + (w as usize) * 4];
-                    for px in row_slice.chunks_exact_mut(4) {
-                        let dst_r = px[0] as f32 / 255.0;
-                        let dst_g = px[1] as f32 / 255.0;
-                        let dst_b = px[2] as f32 / 255.0;
-                        let dst_a = px[3] as f32 / 255.0;
+                    match alpha_mode {
+                        AlphaMode::Premultiplied => {
+                            for px in row_slice.chunks_exact_mut(4) {
+                                let r_lin = srgb_to_linear_u8(color.r());
+                                let g_lin = srgb_to_linear_u8(color.g());
+                                let b_lin = srgb_to_linear_u8(color.b());
+                                let a = color.a() as f32 / 255.0;
 
-                        let out_a = src_a + dst_a * (1.0 - src_a);
-                        let inv = if out_a > 0.0 { 1.0 - src_a } else { 0.0 };
-                        let out_r = (r as f32 / 255.0) * src_a + dst_r * inv;
-                        let out_g = (g as f32 / 255.0) * src_a + dst_g * inv;
-                        let out_b = (b as f32 / 255.0) * src_a + dst_b * inv;
+                                let r_pma = r_lin * a;
+                                let g_pma = g_lin * a;
+                                let b_pma = b_lin * a;
 
-                        px[0] = (out_r.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                        px[1] = (out_g.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                        px[2] = (out_b.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
-                        px[3] = (out_a.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8;
+                                px[0] = linear_to_srgb_u8(r_pma);
+                                px[1] = linear_to_srgb_u8(g_pma);
+                                px[2] = linear_to_srgb_u8(b_pma);
+                                // keep alpha as-is
+                                px[3] = color.a();
+                            }
+                        }
+                        AlphaMode::Unmultiplied => {
+                            for px in row_slice.chunks_exact_mut(4) {
+                                px[0] = color.r();
+                                px[1] = color.g();
+                                px[2] = color.b();
+                                px[3] = color.a();
+                            }
+                        }
                     }
                 }
             },
@@ -1509,4 +1517,14 @@ impl UpdateReason {
                 | UpdateReason::DeletedTextAtCursor
         )
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AlphaMode {
+    /// Use premultiplied alpha for rendering. This is generally preferred for performance
+    /// and quality, especially when blending with other premultiplied content.
+    Premultiplied,
+    /// Use unmultiplied alpha for rendering. This may be necessary when compositing
+    /// with non-premultiplied content, but can lead to artifacts and is less efficient.
+    Unmultiplied,
 }
