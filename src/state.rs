@@ -1083,13 +1083,8 @@ impl<T> TextState<T> {
             self.rasterized_texture.pixels.resize(required_len, 0);
         }
 
-        // Clear to transparent before drawing
-        for px in self.rasterized_texture.pixels.chunks_exact_mut(4) {
-            px[0] = 0;
-            px[1] = 0;
-            px[2] = 0;
-            px[3] = 0;
-        }
+        // Clear to transparent before drawing (fast fill)
+        self.rasterized_texture.pixels.fill(0);
 
         let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
         let text_width = width;
@@ -1111,38 +1106,42 @@ impl<T> TextState<T> {
                 if y0 + h > text_height {
                     h = text_height - y0;
                 }
+                // Precompute the 4-byte pixel once per rectangle and use row-wise fills
+                let mut packed_px = [0u8; 4];
+                match alpha_mode {
+                    AlphaMode::Premultiplied => {
+                        let r_lin = srgb_to_linear_u8(color.r());
+                        let g_lin = srgb_to_linear_u8(color.g());
+                        let b_lin = srgb_to_linear_u8(color.b());
+                        let a = color.a() as f32 / 255.0;
+                        let r_pma = r_lin * a;
+                        let g_pma = g_lin * a;
+                        let b_pma = b_lin * a;
+                        packed_px[0] = linear_to_srgb_u8(r_pma);
+                        packed_px[1] = linear_to_srgb_u8(g_pma);
+                        packed_px[2] = linear_to_srgb_u8(b_pma);
+                        packed_px[3] = color.a();
+                    }
+                    AlphaMode::Unmultiplied => {
+                        packed_px[0] = color.r();
+                        packed_px[1] = color.g();
+                        packed_px[2] = color.b();
+                        packed_px[3] = color.a();
+                    }
+                }
 
+                // Fill each destination row with the precomputed pixel
                 for row in 0..h {
                     let dst_row_start = ((y0 + row) * text_width * 4 + x0 * 4) as usize;
                     let row_slice = &mut self.rasterized_texture.pixels
                         [dst_row_start..dst_row_start + (w as usize) * 4];
-                    match alpha_mode {
-                        AlphaMode::Premultiplied => {
-                            for px in row_slice.chunks_exact_mut(4) {
-                                let r_lin = srgb_to_linear_u8(color.r());
-                                let g_lin = srgb_to_linear_u8(color.g());
-                                let b_lin = srgb_to_linear_u8(color.b());
-                                let a = color.a() as f32 / 255.0;
 
-                                let r_pma = r_lin * a;
-                                let g_pma = g_lin * a;
-                                let b_pma = b_lin * a;
-
-                                px[0] = linear_to_srgb_u8(r_pma);
-                                px[1] = linear_to_srgb_u8(g_pma);
-                                px[2] = linear_to_srgb_u8(b_pma);
-                                // keep alpha as-is
-                                px[3] = color.a();
-                            }
-                        }
-                        AlphaMode::Unmultiplied => {
-                            for px in row_slice.chunks_exact_mut(4) {
-                                px[0] = color.r();
-                                px[1] = color.g();
-                                px[2] = color.b();
-                                px[3] = color.a();
-                            }
-                        }
+                    // Repeat-copy packed_px across the row
+                    // Avoid per-pixel math; just copy the 4-byte pattern
+                    let mut i = 0usize;
+                    while i + 4 <= row_slice.len() {
+                        row_slice[i..i + 4].copy_from_slice(&packed_px);
+                        i += 4;
                     }
                 }
             },

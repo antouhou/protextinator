@@ -22,8 +22,8 @@ smol_str = "0.3"
 serde = { version = "1.0.219", features = ["derive"], optional = true }
 
 [dev-dependencies]
-#grafo = "0.7"
-grafo = { path = "../grafo" }
+grafo = "0.9"
+#grafo = { path = "../grafo" }
 winit = "0.30"
 futures = "0.3"
 env_logger = "0.11"

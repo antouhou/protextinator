@@ -809,7 +809,9 @@ dependencies = [
 
 [[package]]
 name = "grafo"
-version = "0.8.1"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab3c5679dd055e95e09c359576903feb606f558fa43236dd2805ee203cb0e885"
 dependencies = [
  "ahash",
  "bytemuck",
