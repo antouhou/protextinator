@@ -758,3 +758,61 @@ pub fn test_combined_scroll_with_alignment() {
         "Vertical scrolling should not work with VerticalTextAlignment::Start"
     );
 }
+
+#[test]
+pub fn test_scale_factor_consistency() {
+    let mut ctx = TextContext::default();
+    let text = "Line 1\nLine 2\nLine 3".to_string();
+
+    // Start with vertical centering to introduce a non-zero vertical alignment offset
+    let mut text_state = TextState::new_with_text(text.clone(), &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_with_alignment(
+        HorizontalTextAlignment::Left,
+        VerticalTextAlignment::Center,
+    ));
+    text_state.set_outer_size(&Size::new(200.0, 100.0));
+
+    // Base scale 1.0
+    text_state.set_scale_factor(1.0);
+    text_state.recalculate(&mut ctx);
+    let scroll1 = text_state.absolute_scroll(); // logical
+
+    // Increase scale factor; logical scroll should remain the same
+    text_state.set_scale_factor(2.0);
+    text_state.recalculate(&mut ctx);
+    let scroll2 = text_state.absolute_scroll(); // logical
+
+    assert!(scroll1.approx_eq(&scroll2, 0.75), "Absolute scroll should be stable in logical pixels when scale changes. Before: {:?}, After: {:?}", scroll1, scroll2);
+
+    // Hit-test should also be stable in logical coords
+    text_state.is_selectable = true;
+    text_state.is_editable = true;
+    text_state.are_actions_enabled = true;
+    // Click near the start of the first visible line
+    text_state.handle_press(&mut ctx, Point::new(2.0, 5.0));
+    let cursor_idx_scale2 = text_state.cursor_char_index().unwrap_or(0);
+
+    // Switch back to scale 1.0 and click the same logical position
+    text_state.set_scale_factor(1.0);
+    text_state.recalculate(&mut ctx);
+    text_state.handle_press(&mut ctx, Point::new(2.0, 5.0));
+    let cursor_idx_scale1 = text_state.cursor_char_index().unwrap_or(0);
+
+    assert_eq!(cursor_idx_scale1, cursor_idx_scale2, "Hit-test should map the same logical coords to the same character across scales");
+
+    // Selection bounds are exposed in logical px; they should be comparable across scales
+    // Use the public action API to select all
+    text_state.apply_action(&mut ctx, &Action::SelectAll);
+    let lines_scale1 = text_state.selection().lines().to_vec();
+
+    text_state.set_scale_factor(2.0);
+    text_state.recalculate(&mut ctx);
+    let lines_scale2 = text_state.selection().lines().to_vec();
+
+    // Compare first selection line heights (allow small epsilon due to layout/rounding)
+    if let (Some(l1), Some(l2)) = (lines_scale1.first(), lines_scale2.first()) {
+        let h1 = (l1.end_y_pt.unwrap_or(0.0) - l1.start_y_pt.unwrap_or(0.0)).abs();
+        let h2 = (l2.end_y_pt.unwrap_or(0.0) - l2.start_y_pt.unwrap_or(0.0)).abs();
+        assert!((h1 - h2).abs() < 1.0, "Selection line height should be stable in logical px across scales: h1={} h2={}", h1, h2);
+    }
+}

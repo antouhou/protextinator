@@ -746,6 +746,7 @@ impl<T> TextState<T> {
     /// println!("Scrolled by: ({}, {})", scroll.x, scroll.y);
     /// ```
     pub fn absolute_scroll(&self) -> Point {
+        let scale = self.params.scale_factor().max(0.01);
         let scroll = self.buffer.scroll();
         let scroll_line = scroll.line;
         let scroll_vertical = scroll.vertical;
@@ -759,14 +760,16 @@ impl<T> TextState<T> {
             }
             if let Some(layout_lines) = line.layout_opt() {
                 for layout_line in layout_lines {
-                    line_vertical_start += layout_line.line_height_opt.unwrap_or(line_height);
+                    line_vertical_start += layout_line
+                        .line_height_opt
+                        .unwrap_or(line_height * scale);
                 }
             }
         }
-
+        // Convert to LOGICAL pixels
         Point {
-            x: scroll_horizontal,
-            y: scroll_vertical + line_vertical_start,
+            x: scroll_horizontal / scale,
+            y: (scroll_vertical + line_vertical_start) / scale,
         }
     }
 
@@ -792,38 +795,42 @@ impl<T> TextState<T> {
     /// ```
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
         let mut new_scroll = self.buffer.scroll();
+        let scale = self.params.scale_factor().max(0.01);
 
         let can_scroll_vertically =
             matches!(self.style().vertical_alignment, VerticalTextAlignment::None);
 
-        new_scroll.horizontal = scroll.x;
+        // Horizontal scroll is stored in DEVICE pixels
+        new_scroll.horizontal = scroll.x * scale;
 
         if can_scroll_vertically {
             let line_height = self.style().line_height_pt();
             let mut line_index = 0;
-            let mut accumulated_height = 0.0;
+            let mut accumulated_height_device = 0.0;
+            let target_y_device = scroll.y * scale;
 
             for (i, line) in self.buffer.lines.iter().enumerate() {
-                let mut line_height_total = 0.0;
+                let mut line_height_total_device = 0.0;
 
                 if let Some(layout_lines) = line.layout_opt() {
                     for layout_line in layout_lines {
-                        line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                        line_height_total_device +=
+                            layout_line.line_height_opt.unwrap_or(line_height * scale);
                     }
                 }
 
-                if accumulated_height + line_height_total > scroll.y {
+                if accumulated_height_device + line_height_total_device > target_y_device {
                     line_index = i;
                     break;
                 }
 
-                accumulated_height += line_height_total;
+                accumulated_height_device += line_height_total_device;
                 line_index = i + 1; // In case we don't break, this will be the last line
             }
 
-            // Set the line and calculate the remaining vertical offset
+            // Set the line and calculate the remaining vertical offset (device px)
             new_scroll.line = line_index;
-            new_scroll.vertical = scroll.y - accumulated_height;
+            new_scroll.vertical = target_y_device - accumulated_height_device;
         }
 
         // Apply only if changed
@@ -861,12 +868,13 @@ impl<T> TextState<T> {
         self.selection.lines.clear();
         for run in self.buffer.layout_runs() {
             if let Some((start_x, width)) = run.highlight(start_cursor.cursor, end_cursor.cursor) {
+                let scale = self.params.scale_factor().max(0.01);
                 self.selection.lines.push(SelectionLine {
-                    // TODO: cosmic test doesn't seem to correctly apply horizontal scrolling
-                    start_x_pt: Some(start_x - self.buffer.scroll().horizontal),
-                    end_x_pt: Some(start_x + width - self.buffer.scroll().horizontal),
-                    start_y_pt: Some(run.line_top),
-                    end_y_pt: Some(run.line_top + run.line_height),
+                    // Convert to LOGICAL pixels
+                    start_x_pt: Some((start_x - self.buffer.scroll().horizontal) / scale),
+                    end_x_pt: Some((start_x + width - self.buffer.scroll().horizontal) / scale),
+                    start_y_pt: Some(run.line_top / scale),
+                    end_y_pt: Some((run.line_top + run.line_height) / scale),
                 });
             }
         }
@@ -911,16 +919,19 @@ impl<T> TextState<T> {
     }
 
     fn calculate_caret_position(&mut self) -> Option<Point> {
-        let horizontal_scroll = self.buffer.scroll().horizontal;
+        // Return caret position in LOGICAL pixels relative to viewport
+        let horizontal_scroll_device = self.buffer.scroll().horizontal;
+        let scale = self.params.scale_factor().max(0.01);
         let mut editor = Editor::new(&mut self.buffer);
         editor.set_cursor(self.cursor.cursor);
 
         editor.cursor_position().map(|pos| {
-            let mut point = Point::from(pos);
-            // Adjust the point to account for horizontal scroll, as cosmic_text does not
-            //  support horizontal scrolling natively.
-            point.x -= horizontal_scroll;
-            point
+            // pos from cosmic_text is in DEVICE pixels
+            let mut point_device = Point::from(pos);
+            // Adjust by horizontal scroll (device px)
+            point_device.x -= horizontal_scroll_device;
+            // Convert to logical
+            Point::new(point_device.x / scale, point_device.y / scale)
         })
     }
 
@@ -931,10 +942,12 @@ impl<T> TextState<T> {
 
         let mut scroll = self.buffer.scroll();
         let text_area_size = self.params.size();
-        let vertical_scroll_to_align_text =
+        let vertical_scroll_to_align_text_logical =
             calculate_vertical_offset(self.params.style(), text_area_size, self.inner_dimensions);
-        if (scroll.vertical - vertical_scroll_to_align_text).abs() > SIZE_EPSILON {
-            scroll.vertical = vertical_scroll_to_align_text;
+        let scale = self.params.scale_factor().max(0.01);
+        let target_vertical_device = vertical_scroll_to_align_text_logical * scale;
+        if (scroll.vertical - target_vertical_device).abs() > SIZE_EPSILON {
+            scroll.vertical = target_vertical_device;
             self.buffer.set_scroll(scroll);
             // Vertical alignment scroll change affects raster
             self.raster_dirty = true;
@@ -950,9 +963,12 @@ impl<T> TextState<T> {
     ) -> Option<()> {
         if update_reason.is_cursor_updated() {
             let text_area_size = self.params.size();
+            let scale = self.params.scale_factor().max(0.01);
             let old_scroll = self.buffer.scroll();
-            let old_relative_caret_x = self.relative_caret_position.map_or(0.0, |p| p.x);
-            let old_absolute_caret_x = old_relative_caret_x + old_scroll.horizontal;
+            let old_relative_caret_x_logical = self.relative_caret_position.map_or(0.0, |p| p.x);
+            // Convert old absolute caret to logical coords
+            let old_absolute_caret_x_logical =
+                old_relative_caret_x_logical + old_scroll.horizontal / scale;
 
             let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
                 &mut self.buffer,
@@ -960,18 +976,19 @@ impl<T> TextState<T> {
                 font_system,
                 self.params.size(),
                 self.params.style(),
+                scale,
             )?;
             let mut new_scroll = self.buffer.scroll();
             let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
-            let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
+            let new_absolute_caret_offset = caret_position_relative_to_buffer.x; // logical
 
             // TODO: A little hack to set horizontal scroll
             let current_absolute_visible_text_area = (
-                old_scroll.horizontal,
-                old_scroll.horizontal + text_area_width,
+                old_scroll.horizontal / scale,
+                old_scroll.horizontal / scale + text_area_width,
             );
             let min = current_absolute_visible_text_area.0;
             let max = current_absolute_visible_text_area.1;
@@ -984,12 +1001,14 @@ impl<T> TextState<T> {
                 let is_moving_caret_without_updating_the_text =
                     matches!(update_reason, UpdateReason::MoveCaret);
                 if !is_moving_caret_without_updating_the_text {
-                    let text_shift = old_absolute_caret_x - new_absolute_caret_offset;
+                    let text_shift_logical =
+                        old_absolute_caret_x_logical - new_absolute_caret_offset;
 
                     // If a text was deleted (caret moved left), adjust the scroll to compensate
-                    if text_shift > 0.0 {
+                    if text_shift_logical > 0.0 {
                         // Adjust scroll to keep the caret visually in the same position
-                        new_scroll.horizontal = (old_scroll.horizontal - text_shift).max(0.0);
+                        new_scroll.horizontal =
+                            (old_scroll.horizontal - text_shift_logical * scale).max(0.0);
 
                         // Ensure we don't scroll beyond the text boundaries
                         let inner_dimensions = self.inner_size();
@@ -997,8 +1016,10 @@ impl<T> TextState<T> {
 
                         if inner_dimensions.x > area_width {
                             // Text is larger than viewport - clamp scroll to valid range
-                            let max_scroll = inner_dimensions.x - area_width + self.caret_width;
-                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll);
+                            let max_scroll_device =
+                                (inner_dimensions.x - area_width + self.caret_width) * scale;
+                            new_scroll.horizontal =
+                                new_scroll.horizontal.min(max_scroll_device);
                         } else {
                             // Text fits within the viewport - no scroll needed
                             new_scroll.horizontal = 0.0;
@@ -1007,9 +1028,9 @@ impl<T> TextState<T> {
                 }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
-                    new_absolute_caret_offset - text_area_width + self.caret_width;
+                    (new_absolute_caret_offset - text_area_width + self.caret_width) * scale;
             } else if new_absolute_caret_offset < min {
-                new_scroll.horizontal = new_absolute_caret_offset;
+                new_scroll.horizontal = new_absolute_caret_offset * scale;
             } else if new_absolute_caret_offset < 0.0 {
                 new_scroll.horizontal = 0.0;
             } else {
@@ -1359,8 +1380,11 @@ impl<T> TextState<T> {
         if self.is_selectable || self.is_editable {
             self.reset_selection();
 
-            let byte_offset_cursor =
-                char_under_position(&self.buffer, click_position_relative_to_area)?;
+            let byte_offset_cursor = char_under_position(
+                &self.buffer,
+                click_position_relative_to_area,
+                self.params.scale_factor(),
+            )?;
             self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
 
             // Reset selection to start at the press location
@@ -1407,8 +1431,11 @@ impl<T> TextState<T> {
             return None;
         }
         if self.is_selectable {
-            let byte_cursor_under_position =
-                char_under_position(&self.buffer, pointer_relative_position)?;
+            let byte_cursor_under_position = char_under_position(
+                &self.buffer,
+                pointer_relative_position,
+                self.params.scale_factor(),
+            )?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
                 self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
