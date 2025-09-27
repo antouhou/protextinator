@@ -1086,6 +1086,7 @@ impl<T> TextState<T> {
         let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
         let text_width = width;
         let text_height = height;
+        // TODO: make an atlas via an adapter trait or something that can be passed to here from the renderer
         self.buffer.draw(
             &mut ctx.font_system,
             &mut ctx.swash_cache,
