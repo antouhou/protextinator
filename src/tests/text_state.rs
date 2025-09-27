@@ -798,7 +798,10 @@ pub fn test_scale_factor_consistency() {
     text_state.handle_press(&mut ctx, Point::new(2.0, 5.0));
     let cursor_idx_scale1 = text_state.cursor_char_index().unwrap_or(0);
 
-    assert_eq!(cursor_idx_scale1, cursor_idx_scale2, "Hit-test should map the same logical coords to the same character across scales");
+    assert_eq!(
+        cursor_idx_scale1, cursor_idx_scale2,
+        "Hit-test should map the same logical coords to the same character across scales"
+    );
 
     // Selection bounds are exposed in logical px; they should be comparable across scales
     // Use the public action API to select all
@@ -813,6 +816,11 @@ pub fn test_scale_factor_consistency() {
     if let (Some(l1), Some(l2)) = (lines_scale1.first(), lines_scale2.first()) {
         let h1 = (l1.end_y_pt.unwrap_or(0.0) - l1.start_y_pt.unwrap_or(0.0)).abs();
         let h2 = (l2.end_y_pt.unwrap_or(0.0) - l2.start_y_pt.unwrap_or(0.0)).abs();
-        assert!((h1 - h2).abs() < 1.0, "Selection line height should be stable in logical px across scales: h1={} h2={}", h1, h2);
+        assert!(
+            (h1 - h2).abs() < 1.0,
+            "Selection line height should be stable in logical px across scales: h1={} h2={}",
+            h1,
+            h2
+        );
     }
 }

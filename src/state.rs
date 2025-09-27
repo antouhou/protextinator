@@ -760,9 +760,8 @@ impl<T> TextState<T> {
             }
             if let Some(layout_lines) = line.layout_opt() {
                 for layout_line in layout_lines {
-                    line_vertical_start += layout_line
-                        .line_height_opt
-                        .unwrap_or(line_height * scale);
+                    line_vertical_start +=
+                        layout_line.line_height_opt.unwrap_or(line_height * scale);
                 }
             }
         }
@@ -1018,8 +1017,7 @@ impl<T> TextState<T> {
                             // Text is larger than viewport - clamp scroll to valid range
                             let max_scroll_device =
                                 (inner_dimensions.x - area_width + self.caret_width) * scale;
-                            new_scroll.horizontal =
-                                new_scroll.horizontal.min(max_scroll_device);
+                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll_device);
                         } else {
                             // Text fits within the viewport - no scroll needed
                             new_scroll.horizontal = 0.0;
