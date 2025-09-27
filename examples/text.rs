@@ -391,8 +391,6 @@ impl<'a> ApplicationHandler for App<'a> {
     }
 }
 
-// Local rasterizer removed; textures are produced by TextManager
-
 fn main() {
     env_logger::init();
 
