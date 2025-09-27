@@ -227,7 +227,8 @@ impl<'a> App<'a> {
 
             // Rasterize all text states into CPU textures
             let t_raster_start = Instant::now();
-            self.text_manager.rasterize_all_textures(AlphaMode::Premultiplied);
+            self.text_manager
+                .rasterize_all_textures(AlphaMode::Premultiplied);
             let raster_time = t_raster_start.elapsed();
 
             // Upload main text texture and draw

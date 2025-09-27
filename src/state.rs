@@ -13,13 +13,13 @@ use crate::math::Size;
 use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
+use crate::utils::{linear_to_srgb_u8, srgb_to_linear_u8};
 use crate::{Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
 use smol_str::SmolStr;
 use std::time::{Duration, Instant};
-use crate::utils::{linear_to_srgb_u8, srgb_to_linear_u8};
 
 /// Size comparison epsilon for floating-point calculations.
 pub const SIZE_EPSILON: f32 = 0.0001;
@@ -193,7 +193,11 @@ impl<T> TextState<T> {
             inner_dimensions: Size::ZERO,
             buffer: Buffer::new(font_system, metrics),
 
-            rasterized_texture: RasterizedTexture { pixels: Vec::new(), width: 0, height: 0 },
+            rasterized_texture: RasterizedTexture {
+                pixels: Vec::new(),
+                width: 0,
+                height: 0,
+            },
             raster_dirty: true,
 
             metadata,
@@ -1046,7 +1050,11 @@ impl<T> TextState<T> {
     ///
     /// Returns true if rasterization was performed (and texture updated), false if skipped
     /// (e.g., zero-sized target).
-    pub(crate) fn rasterize_into_texture(&mut self, ctx: &mut TextContext, alpha_mode: AlphaMode) -> bool {
+    pub(crate) fn rasterize_into_texture(
+        &mut self,
+        ctx: &mut TextContext,
+        alpha_mode: AlphaMode,
+    ) -> bool {
         // Compute device-pixel texture size from the logical outer size and scale factor
         let size = self.outer_size();
         let scale = ctx.scale_factor.max(0.01);
