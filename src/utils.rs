@@ -92,3 +92,24 @@ impl<'de> Deserialize<'de> for ArcCowStr {
         Ok(ArcCowStr::from(s))
     }
 }
+
+#[inline(always)]
+pub fn srgb_to_linear_u8(c: u8) -> f32 {
+    let x = c as f32 / 255.0;
+    if x <= 0.04045 {
+        x / 12.92
+    } else {
+        ((x + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+#[inline(always)]
+pub fn linear_to_srgb_u8(x: f32) -> u8 {
+    let x = x.clamp(0.0, 1.0);
+    let y = if x <= 0.0031308 {
+        x * 12.92
+    } else {
+        1.055 * x.powf(1.0 / 2.4) - 0.055
+    };
+    (y.clamp(0.0, 1.0) * 255.0 + 0.5).floor() as u8
+}

@@ -3,7 +3,7 @@
 //! This module provides high-level management of multiple text states, font loading,
 //! and resource tracking for text rendering systems.
 
-use crate::state::TextState;
+use crate::state::{AlphaMode, TextState};
 use crate::Id;
 use ahash::{HashMap, HashSet, HashSetExt};
 use cosmic_text::{fontdb, FontSystem, SwashCache};
@@ -18,6 +18,8 @@ pub struct TextContext {
     pub font_system: FontSystem,
     /// Cache for rendered glyphs to improve performance.
     pub swash_cache: SwashCache,
+    /// Current device scale factor. 1.0 means logical pixels; >1.0 means HiDPI.
+    pub scale_factor: f32,
     /// Tracks which text states are being used for garbage collection.
     pub usage_tracker: TextUsageTracker,
 }
@@ -28,6 +30,7 @@ impl Default for TextContext {
         Self {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
+            scale_factor: 1.0,
             usage_tracker: TextUsageTracker::new(),
         }
     }
@@ -166,6 +169,62 @@ impl<TMetadata> TextManager<TMetadata> {
         self.text_states
             .retain(|id, _| accessed_states.contains(id));
     }
+
+    /// Sets the global scale factor used for shaping and rasterization.
+    /// This keeps `FontSize` and sizes in logical pixels while shaping in device pixels.
+    /// Call this when the window scale factor changes.
+    pub fn set_scale_factor(&mut self, scale: f32) {
+        let scale = scale.max(0.01);
+        if (self.text_context.scale_factor - scale).abs() < 0.0001 {
+            return;
+        }
+        self.text_context.scale_factor = scale;
+        // Update each state's params with new scale; they'll mark themselves changed.
+        for state in self.text_states.values_mut() {
+            // This will mark params changed if different and reshape on next recalc
+            state.set_scale_factor(scale);
+        }
+    }
+
+    /// Rasterizes all text states into CPU-side RGBA textures and stores them in the states.
+    ///
+    /// This will recalculate the shaping/layout if needed prior to rasterization.
+    /// Currently runs on a single thread; the API is designed to be easily parallelized later.
+    pub fn rasterize_all_textures(&mut self, alpha_mode: AlphaMode) -> Vec<RasterizedTextureInfo> {
+        // In the future this can be parallelized by splitting the states into chunks and
+        // creating per-thread SwashCache/FontSystem references as needed.
+        let mut changes = Vec::new();
+        for (id, state) in self.text_states.iter_mut() {
+            let old_w = state.rasterized_texture().width;
+            let old_h = state.rasterized_texture().height;
+            // Ensure the buffer is up to date
+            state.recalculate(&mut self.text_context);
+            // Rasterize into the state's texture storage
+            let rerasterized = state.rasterize_into_texture(&mut self.text_context, alpha_mode);
+            if rerasterized {
+                let new_w = state.rasterized_texture().width;
+                let new_h = state.rasterized_texture().height;
+                let resized = new_w != old_w || new_h != old_h;
+                changes.push(RasterizedTextureInfo {
+                    id: *id,
+                    width: new_w,
+                    height: new_h,
+                    resized,
+                });
+            }
+        }
+        changes
+    }
+}
+
+/// Information about a text state's rasterized texture after `rasterize_all_textures`.
+#[derive(Debug, Clone, Copy)]
+pub struct RasterizedTextureInfo {
+    pub id: Id,
+    pub width: u32,
+    pub height: u32,
+    /// True if the texture dimensions changed compared to the previous rasterization.
+    pub resized: bool,
 }
 
 impl TextContext {

@@ -78,5 +78,5 @@ pub use action::{Action, ActionResult};
 pub use cosmic_text;
 pub use id::Id;
 pub use math::{Point, Rect};
-pub use state::{Selection, SelectionLine, TextState};
+pub use state::{AlphaMode, RasterizedTexture, Selection, SelectionLine, TextState};
 pub use text_manager::{TextContext, TextManager};

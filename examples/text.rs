@@ -4,8 +4,9 @@ use protextinator::style::{
     FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
     VerticalTextAlignment,
 };
-use protextinator::{cosmic_text::FontSystem, Id, Point, Rect, TextManager};
+use protextinator::{AlphaMode, Id, Point, Rect, TextManager};
 use std::sync::Arc;
+use std::time::Instant;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -18,10 +19,13 @@ use winit::{
 struct App<'a> {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer<'a>>,
-    font_system: Option<FontSystem>,
     text_content: String,
     cursor_position: usize,
     text_manager: TextManager,
+    // Texture id for the rendered text for the renderer
+    text_texture_id: u64,
+    // Track allocated texture size to avoid reallocating each frame
+    text_texture_dimenstions: Option<(u32, u32)>,
 }
 
 impl<'a> Default for App<'a> {
@@ -35,10 +39,11 @@ impl<'a> App<'a> {
         Self {
             window: None,
             renderer: None,
-            font_system: None,
             text_content: "Welcome to Protextinator!\n\nThis example demonstrates the integration of:\n• Protextinator - for advanced text management and caching\n• Grafo 0.6 - for GPU-accelerated rendering\n• Winit 0.30 - for cross-platform windowing\n\nKey features being showcased:\n✓ Text shaping and layout via cosmic-text\n✓ Efficient text buffer caching\n✓ Direct buffer rendering with add_text_buffer()\n✓ Real-time text editing and reshaping\n✓ Word wrapping and text styling\n\nTry typing to see the text management in action!\nNotice how protextinator efficiently caches and manages the text buffers.".to_string(),
             cursor_position: 0,
             text_manager: TextManager::new(),
+            text_texture_id: 123,
+            text_texture_dimenstions: None,
         }
     }
     fn setup_renderer(&mut self, event_loop: &ActiveEventLoop) {
@@ -65,12 +70,14 @@ impl<'a> App<'a> {
             false, // transparent
         ));
 
-        // Initialize text systems
-        let font_system = FontSystem::new();
+        // Renderer receives the initial scale factor at creation time.
 
         self.window = Some(window);
         self.renderer = Some(renderer);
-        self.font_system = Some(font_system);
+        // Ensure text manager uses the same scale factor for shaping
+        if let Some(r) = self.renderer.as_ref() {
+            self.text_manager.set_scale_factor(r.scale_factor() as f32);
+        }
     }
 
     fn handle_text_input(&mut self, text: &str) {
@@ -122,7 +129,7 @@ impl<'a> App<'a> {
             let text_style = TextStyle {
                 font_size: FontSize(18.0),
                 line_height: LineHeight(1.5),
-                font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xE5, 0xE5, 0xE5)), // Light gray
+                font_color: FontColor(protextinator::cosmic_text::Color::rgb(0xFF, 0xFF, 0xFF)), // Pure white
                 horizontal_alignment: HorizontalTextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
@@ -138,29 +145,12 @@ impl<'a> App<'a> {
             // Get the text state and reshape if needed
             if let Some(text_state) = self.text_manager.text_states.get_mut(&text_id) {
                 text_state.set_text(&self.text_content);
+
+                // Keep font sizes and outer sizes in logical pixels. We pass scale to the manager instead.
                 text_state.set_outer_size(&text_rect.size().into());
                 text_state.set_style(&text_style);
                 text_state.set_buffer_metadata(text_id.0 as usize);
                 text_state.recalculate(&mut self.text_manager.text_context);
-
-                // Now here's the key part: use protextinator's buffer with grafo's add_text_buffer!
-                let buffer = &text_state.buffer();
-                // Define the area where the text should be rendered
-                let text_area = MathRect {
-                    min: (text_rect.min.x, text_rect.min.y).into(),
-                    max: (text_rect.max.x, text_rect.max.y).into(),
-                };
-
-                // Use grafo's add_text_buffer with protextinator's shaped buffer
-                // This is the perfect integration of both libraries!
-                renderer.add_text_buffer(
-                    buffer,                    // The cosmic-text buffer from protextinator
-                    text_area,                 // Area to render in
-                    Color::rgb(229, 229, 229), // Fallback color
-                    0.0,                       // Vertical offset
-                    text_id.0 as usize,        // Buffer ID (must match the metadata in buffer)
-                    None,                      // No clipping
-                );
             }
 
             // Add a simple cursor indicator
@@ -217,20 +207,81 @@ impl<'a> App<'a> {
                     stats_text_state.recalculate(&mut self.text_manager.text_context);
 
                     // Render stats using add_text_buffer as well
-                    let stats_buffer = &stats_text_state.buffer();
-                    let stats_area = MathRect {
+                    let _stats_buffer = &stats_text_state.buffer();
+                    let _stats_area = MathRect {
                         min: (stats_rect.min.x, stats_rect.min.y).into(),
                         max: (stats_rect.max.x, stats_rect.max.y).into(),
                     };
 
-                    renderer.add_text_buffer(
-                        stats_buffer,
-                        stats_area,
-                        Color::rgb(97, 175, 239),
-                        0.0,
-                        stats_id.0 as usize,
-                        None,
+                    // TODO: in future, draw stats using a separate texture as well
+                    // renderer.add_text_buffer(
+                    //     stats_buffer,
+                    //     stats_area,
+                    //     Color::rgb(97, 175, 239),
+                    //     0.0,
+                    //     stats_id.0 as usize,
+                    //     None,
+                    // );
+                }
+            }
+
+            // Rasterize all text states into CPU textures
+            let t_raster_start = Instant::now();
+            self.text_manager
+                .rasterize_all_textures(AlphaMode::Premultiplied);
+            let raster_time = t_raster_start.elapsed();
+
+            // Upload main text texture and draw
+            if let Some(text_state) = self.text_manager.text_states.get(&text_id) {
+                let rt = text_state.rasterized_texture();
+                if rt.width > 0 && rt.height > 0 {
+                    let text_area_size = MathRect {
+                        min: (text_rect.min.x, text_rect.min.y).into(),
+                        max: (text_rect.max.x, text_rect.max.y).into(),
+                    }
+                    .size();
+
+                    let texture_dimensions = (rt.width, rt.height);
+
+                    // Allocate or reallocate the texture only when size changes
+                    if self.text_texture_dimenstions != Some(texture_dimensions) {
+                        renderer
+                            .texture_manager()
+                            .allocate_texture(self.text_texture_id, texture_dimensions);
+                        self.text_texture_dimenstions = Some(texture_dimensions);
+                    }
+
+                    let t_upload_start = Instant::now();
+                    match renderer.texture_manager().load_data_into_texture(
+                        self.text_texture_id,
+                        texture_dimensions,
+                        &rt.pixels,
+                    ) {
+                        Ok(_) => {}
+                        Err(err) => eprintln!("Failed to load text texture data: {err:?}"),
+                    }
+                    let upload_time = t_upload_start.elapsed();
+
+                    println!(
+                        "rasterize: {} µs, load_texture: {} µs",
+                        raster_time.as_micros(),
+                        upload_time.as_micros()
                     );
+
+                    // TODO: cache shapes
+                    let text_shape_id = renderer.add_shape(
+                        Shape::rect(
+                            [(0.0, 0.0), (text_area_size.width, text_area_size.height)],
+                            Color::TRANSPARENT,
+                            Stroke::new(0.0, Color::TRANSPARENT),
+                        ),
+                        None,
+                        (text_rect.min.x, text_rect.min.y),
+                        // TODO: that's not an actual cache key, but it's fine for now
+                        Some(self.text_texture_id),
+                    );
+
+                    renderer.set_shape_texture(text_shape_id, Some(self.text_texture_id));
                 }
             }
 
@@ -263,11 +314,33 @@ impl<'a> ApplicationHandler for App<'a> {
                 event_loop.exit();
             }
             WindowEvent::Resized(physical_size) => {
+                println!("Resized to {:?}", physical_size);
                 if let Some(renderer) = &mut self.renderer {
                     let new_size = (physical_size.width, physical_size.height);
                     renderer.resize(new_size);
                 }
                 if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                println!("Scale factor changed: {}", scale_factor);
+                if let Some(window) = &self.window {
+                    let size = window.inner_size();
+                    let physical_size = (size.width, size.height);
+                    // Recreate renderer with the new scale factor
+                    let new_renderer = block_on(Renderer::new(
+                        window.clone(),
+                        physical_size,
+                        scale_factor,
+                        true,
+                        false,
+                    ));
+                    self.renderer = Some(new_renderer);
+                    // Propagate scale to TextManager so buffers reshape in device pixels
+                    self.text_manager.set_scale_factor(scale_factor as f32);
+                    // Force texture reallocation next frame if needed
+                    self.text_texture_dimenstions = None;
                     window.request_redraw();
                 }
             }

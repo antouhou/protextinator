@@ -13,6 +13,7 @@ use crate::math::Size;
 use crate::style::{TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
+use crate::utils::{linear_to_srgb_u8, srgb_to_linear_u8};
 use crate::{Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
@@ -22,6 +23,14 @@ use std::time::{Duration, Instant};
 
 /// Size comparison epsilon for floating-point calculations.
 pub const SIZE_EPSILON: f32 = 0.0001;
+
+/// CPU-side RGBA8 texture holding the rasterized contents of a text buffer.
+#[derive(Debug, Clone)]
+pub struct RasterizedTexture {
+    pub pixels: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
 
 /// Represents a single line of text selection with visual boundaries.
 ///
@@ -110,6 +119,11 @@ pub struct TextState<T> {
     inner_dimensions: Size,
     buffer: Buffer,
 
+    // CPU-side cached rasterized texture of the current buffer (RGBA8, device pixels)
+    rasterized_texture: RasterizedTexture,
+    // Whether raster content needs to be regenerated
+    raster_dirty: bool,
+
     // Settings
     /// Can text be selected?
     pub is_selectable: bool,
@@ -178,6 +192,13 @@ impl<T> TextState<T> {
 
             inner_dimensions: Size::ZERO,
             buffer: Buffer::new(font_system, metrics),
+
+            rasterized_texture: RasterizedTexture {
+                pixels: Vec::new(),
+                width: 0,
+                height: 0,
+            },
+            raster_dirty: true,
 
             metadata,
         }
@@ -455,6 +476,11 @@ impl<T> TextState<T> {
         &self.buffer
     }
 
+    /// Returns the last rasterized CPU texture.
+    pub fn rasterized_texture(&self) -> &RasterizedTexture {
+        &self.rasterized_texture
+    }
+
     /// Returns the length of the text in characters. Note that this is different from the
     /// string .len(), which returns the length in bytes.
     ///
@@ -720,6 +746,7 @@ impl<T> TextState<T> {
     /// println!("Scrolled by: ({}, {})", scroll.x, scroll.y);
     /// ```
     pub fn absolute_scroll(&self) -> Point {
+        let scale = self.params.scale_factor().max(0.01);
         let scroll = self.buffer.scroll();
         let scroll_line = scroll.line;
         let scroll_vertical = scroll.vertical;
@@ -733,14 +760,15 @@ impl<T> TextState<T> {
             }
             if let Some(layout_lines) = line.layout_opt() {
                 for layout_line in layout_lines {
-                    line_vertical_start += layout_line.line_height_opt.unwrap_or(line_height);
+                    line_vertical_start +=
+                        layout_line.line_height_opt.unwrap_or(line_height * scale);
                 }
             }
         }
-
+        // Convert to LOGICAL pixels
         Point {
-            x: scroll_horizontal,
-            y: scroll_vertical + line_vertical_start,
+            x: scroll_horizontal / scale,
+            y: (scroll_vertical + line_vertical_start) / scale,
         }
     }
 
@@ -766,41 +794,54 @@ impl<T> TextState<T> {
     /// ```
     pub fn set_absolute_scroll(&mut self, scroll: Point) {
         let mut new_scroll = self.buffer.scroll();
+        let scale = self.params.scale_factor().max(0.01);
 
         let can_scroll_vertically =
             matches!(self.style().vertical_alignment, VerticalTextAlignment::None);
 
-        new_scroll.horizontal = scroll.x;
+        // Horizontal scroll is stored in DEVICE pixels
+        new_scroll.horizontal = scroll.x * scale;
 
         if can_scroll_vertically {
             let line_height = self.style().line_height_pt();
             let mut line_index = 0;
-            let mut accumulated_height = 0.0;
+            let mut accumulated_height_device = 0.0;
+            let target_y_device = scroll.y * scale;
 
             for (i, line) in self.buffer.lines.iter().enumerate() {
-                let mut line_height_total = 0.0;
+                let mut line_height_total_device = 0.0;
 
                 if let Some(layout_lines) = line.layout_opt() {
                     for layout_line in layout_lines {
-                        line_height_total += layout_line.line_height_opt.unwrap_or(line_height);
+                        line_height_total_device +=
+                            layout_line.line_height_opt.unwrap_or(line_height * scale);
                     }
                 }
 
-                if accumulated_height + line_height_total > scroll.y {
+                if accumulated_height_device + line_height_total_device > target_y_device {
                     line_index = i;
                     break;
                 }
 
-                accumulated_height += line_height_total;
+                accumulated_height_device += line_height_total_device;
                 line_index = i + 1; // In case we don't break, this will be the last line
             }
 
-            // Set the line and calculate the remaining vertical offset
+            // Set the line and calculate the remaining vertical offset (device px)
             new_scroll.line = line_index;
-            new_scroll.vertical = scroll.y - accumulated_height;
+            new_scroll.vertical = target_y_device - accumulated_height_device;
         }
 
-        self.buffer.set_scroll(new_scroll);
+        // Apply only if changed
+        let old = self.buffer.scroll();
+        if (old.horizontal - new_scroll.horizontal).abs() > SIZE_EPSILON
+            || (old.vertical - new_scroll.vertical).abs() > SIZE_EPSILON
+            || old.line != new_scroll.line
+        {
+            self.buffer.set_scroll(new_scroll);
+            // Any scroll change requires re-rasterization
+            self.raster_dirty = true;
+        }
     }
 
     /// Calculates physical selection area based on the selection start and end glyph indices
@@ -826,16 +867,16 @@ impl<T> TextState<T> {
         self.selection.lines.clear();
         for run in self.buffer.layout_runs() {
             if let Some((start_x, width)) = run.highlight(start_cursor.cursor, end_cursor.cursor) {
+                let scale = self.params.scale_factor().max(0.01);
                 self.selection.lines.push(SelectionLine {
-                    // TODO: cosmic test doesn't seem to correctly apply horizontal scrolling
-                    start_x_pt: Some(start_x - self.buffer.scroll().horizontal),
-                    end_x_pt: Some(start_x + width - self.buffer.scroll().horizontal),
-                    start_y_pt: Some(run.line_top),
-                    end_y_pt: Some(run.line_top + run.line_height),
+                    // Convert to LOGICAL pixels
+                    start_x_pt: Some((start_x - self.buffer.scroll().horizontal) / scale),
+                    end_x_pt: Some((start_x + width - self.buffer.scroll().horizontal) / scale),
+                    start_y_pt: Some(run.line_top / scale),
+                    end_y_pt: Some((run.line_top + run.line_height) / scale),
                 });
             }
         }
-
         None
     }
 
@@ -877,16 +918,19 @@ impl<T> TextState<T> {
     }
 
     fn calculate_caret_position(&mut self) -> Option<Point> {
-        let horizontal_scroll = self.buffer.scroll().horizontal;
+        // Return caret position in LOGICAL pixels relative to viewport
+        let horizontal_scroll_device = self.buffer.scroll().horizontal;
+        let scale = self.params.scale_factor().max(0.01);
         let mut editor = Editor::new(&mut self.buffer);
         editor.set_cursor(self.cursor.cursor);
 
         editor.cursor_position().map(|pos| {
-            let mut point = Point::from(pos);
-            // Adjust the point to account for horizontal scroll, as cosmic_text does not
-            //  support horizontal scrolling natively.
-            point.x -= horizontal_scroll;
-            point
+            // pos from cosmic_text is in DEVICE pixels
+            let mut point_device = Point::from(pos);
+            // Adjust by horizontal scroll (device px)
+            point_device.x -= horizontal_scroll_device;
+            // Convert to logical
+            Point::new(point_device.x / scale, point_device.y / scale)
         })
     }
 
@@ -897,10 +941,16 @@ impl<T> TextState<T> {
 
         let mut scroll = self.buffer.scroll();
         let text_area_size = self.params.size();
-        let vertical_scroll_to_align_text =
+        let vertical_scroll_to_align_text_logical =
             calculate_vertical_offset(self.params.style(), text_area_size, self.inner_dimensions);
-        scroll.vertical = vertical_scroll_to_align_text;
-        self.buffer.set_scroll(scroll);
+        let scale = self.params.scale_factor().max(0.01);
+        let target_vertical_device = vertical_scroll_to_align_text_logical * scale;
+        if (scroll.vertical - target_vertical_device).abs() > SIZE_EPSILON {
+            scroll.vertical = target_vertical_device;
+            self.buffer.set_scroll(scroll);
+            // Vertical alignment scroll change affects raster
+            self.raster_dirty = true;
+        }
     }
 
     /// Buffer needs to be shaped before calling this function, as it relies on the buffer's layout
@@ -912,9 +962,12 @@ impl<T> TextState<T> {
     ) -> Option<()> {
         if update_reason.is_cursor_updated() {
             let text_area_size = self.params.size();
+            let scale = self.params.scale_factor().max(0.01);
             let old_scroll = self.buffer.scroll();
-            let old_relative_caret_x = self.relative_caret_position.map_or(0.0, |p| p.x);
-            let old_absolute_caret_x = old_relative_caret_x + old_scroll.horizontal;
+            let old_relative_caret_x_logical = self.relative_caret_position.map_or(0.0, |p| p.x);
+            // Convert old absolute caret to logical coords
+            let old_absolute_caret_x_logical =
+                old_relative_caret_x_logical + old_scroll.horizontal / scale;
 
             let caret_position_relative_to_buffer = adjust_vertical_scroll_to_make_caret_visible(
                 &mut self.buffer,
@@ -922,18 +975,19 @@ impl<T> TextState<T> {
                 font_system,
                 self.params.size(),
                 self.params.style(),
+                scale,
             )?;
             let mut new_scroll = self.buffer.scroll();
             let text_area_width = text_area_size.x;
 
             // TODO: there was some other implementation that took horizontal alignment into account,
             //  check if it is needed
-            let new_absolute_caret_offset = caret_position_relative_to_buffer.x;
+            let new_absolute_caret_offset = caret_position_relative_to_buffer.x; // logical
 
             // TODO: A little hack to set horizontal scroll
             let current_absolute_visible_text_area = (
-                old_scroll.horizontal,
-                old_scroll.horizontal + text_area_width,
+                old_scroll.horizontal / scale,
+                old_scroll.horizontal / scale + text_area_width,
             );
             let min = current_absolute_visible_text_area.0;
             let max = current_absolute_visible_text_area.1;
@@ -946,12 +1000,14 @@ impl<T> TextState<T> {
                 let is_moving_caret_without_updating_the_text =
                     matches!(update_reason, UpdateReason::MoveCaret);
                 if !is_moving_caret_without_updating_the_text {
-                    let text_shift = old_absolute_caret_x - new_absolute_caret_offset;
+                    let text_shift_logical =
+                        old_absolute_caret_x_logical - new_absolute_caret_offset;
 
                     // If a text was deleted (caret moved left), adjust the scroll to compensate
-                    if text_shift > 0.0 {
+                    if text_shift_logical > 0.0 {
                         // Adjust scroll to keep the caret visually in the same position
-                        new_scroll.horizontal = (old_scroll.horizontal - text_shift).max(0.0);
+                        new_scroll.horizontal =
+                            (old_scroll.horizontal - text_shift_logical * scale).max(0.0);
 
                         // Ensure we don't scroll beyond the text boundaries
                         let inner_dimensions = self.inner_size();
@@ -959,8 +1015,9 @@ impl<T> TextState<T> {
 
                         if inner_dimensions.x > area_width {
                             // Text is larger than viewport - clamp scroll to valid range
-                            let max_scroll = inner_dimensions.x - area_width + self.caret_width;
-                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll);
+                            let max_scroll_device =
+                                (inner_dimensions.x - area_width + self.caret_width) * scale;
+                            new_scroll.horizontal = new_scroll.horizontal.min(max_scroll_device);
                         } else {
                             // Text fits within the viewport - no scroll needed
                             new_scroll.horizontal = 0.0;
@@ -969,16 +1026,25 @@ impl<T> TextState<T> {
                 }
             } else if new_absolute_caret_offset > max {
                 new_scroll.horizontal =
-                    new_absolute_caret_offset - text_area_width + self.caret_width;
+                    (new_absolute_caret_offset - text_area_width + self.caret_width) * scale;
             } else if new_absolute_caret_offset < min {
-                new_scroll.horizontal = new_absolute_caret_offset;
+                new_scroll.horizontal = new_absolute_caret_offset * scale;
             } else if new_absolute_caret_offset < 0.0 {
                 new_scroll.horizontal = 0.0;
             } else {
                 // Do nothing?
             }
 
-            self.buffer.set_scroll(new_scroll);
+            // Apply only if changed
+            let old = self.buffer.scroll();
+            if (old.horizontal - new_scroll.horizontal).abs() > SIZE_EPSILON
+                || (old.vertical - new_scroll.vertical).abs() > SIZE_EPSILON
+                || old.line != new_scroll.line
+            {
+                self.buffer.set_scroll(new_scroll);
+                // Scroll changes affect raster
+                self.raster_dirty = true;
+            }
         }
 
         None
@@ -994,7 +1060,123 @@ impl<T> TextState<T> {
             let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
             self.inner_dimensions = new_size;
             self.params.reset_changed();
+            // Any layout/text/style/size change requires re-rasterization
+            self.raster_dirty = true;
         }
+    }
+
+    /// Rasterizes the current text buffer into an RGBA8 CPU texture using device-pixel dimensions.
+    ///
+    /// Returns true if rasterization was performed (and texture updated), false if skipped
+    /// (e.g., zero-sized target).
+    pub(crate) fn rasterize_into_texture(
+        &mut self,
+        ctx: &mut TextContext,
+        alpha_mode: AlphaMode,
+    ) -> bool {
+        // Compute device-pixel texture size from the logical outer size and scale factor
+        let size = self.outer_size();
+        let scale = ctx.scale_factor.max(0.01);
+        let width = (size.x * scale).ceil().max(0.0) as u32;
+        let height = (size.y * scale).ceil().max(0.0) as u32;
+        if width == 0 || height == 0 {
+            // No room to rasterize; clear texture and mark clean
+            self.rasterized_texture.width = 0;
+            self.rasterized_texture.height = 0;
+            self.rasterized_texture.pixels.clear();
+            self.raster_dirty = false;
+            return false;
+        }
+
+        let dims_changed =
+            self.rasterized_texture.width != width || self.rasterized_texture.height != height;
+
+        // Skip if nothing changed and dimensions match
+        if !dims_changed && !self.raster_dirty {
+            return false;
+        }
+
+        let required_len = width as usize * height as usize * 4;
+        // Ensure capacity and set length; reuse allocation when possible
+        if self.rasterized_texture.pixels.len() != required_len {
+            self.rasterized_texture.pixels.resize(required_len, 0);
+        }
+
+        // Clear to transparent before drawing (fast fill)
+        self.rasterized_texture.pixels.fill(0);
+
+        let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
+        let text_width = width;
+        let text_height = height;
+        // TODO: make an atlas via an adapter trait or something that can be passed to here from the renderer
+        self.buffer.draw(
+            &mut ctx.font_system,
+            &mut ctx.swash_cache,
+            base_color,
+            |x, y, mut w, mut h, color| {
+                // Clip to buffer bounds
+                let (x0, y0) = ((x as u32).min(text_width), (y as u32).min(text_height));
+                if x0 >= text_width || y0 >= text_height || w == 0 || h == 0 {
+                    return;
+                }
+                if x0 + w > text_width {
+                    w = text_width - x0;
+                }
+                if y0 + h > text_height {
+                    h = text_height - y0;
+                }
+                // Precompute the 4-byte pixel once per rectangle and use row-wise fills
+                let mut packed_px = [0u8; 4];
+                match alpha_mode {
+                    AlphaMode::Premultiplied => {
+                        let r_lin = srgb_to_linear_u8(color.r());
+                        let g_lin = srgb_to_linear_u8(color.g());
+                        let b_lin = srgb_to_linear_u8(color.b());
+                        let a = color.a() as f32 / 255.0;
+                        let r_pma = r_lin * a;
+                        let g_pma = g_lin * a;
+                        let b_pma = b_lin * a;
+                        packed_px[0] = linear_to_srgb_u8(r_pma);
+                        packed_px[1] = linear_to_srgb_u8(g_pma);
+                        packed_px[2] = linear_to_srgb_u8(b_pma);
+                        packed_px[3] = color.a();
+                    }
+                    AlphaMode::Unmultiplied => {
+                        packed_px[0] = color.r();
+                        packed_px[1] = color.g();
+                        packed_px[2] = color.b();
+                        packed_px[3] = color.a();
+                    }
+                }
+
+                // Fill each destination row with the precomputed pixel
+                for row in 0..h {
+                    let dst_row_start = ((y0 + row) * text_width * 4 + x0 * 4) as usize;
+                    let row_slice = &mut self.rasterized_texture.pixels
+                        [dst_row_start..dst_row_start + (w as usize) * 4];
+
+                    // Repeat-copy packed_px across the row
+                    // Avoid per-pixel math; just copy the 4-byte pattern
+                    let mut i = 0usize;
+                    while i + 4 <= row_slice.len() {
+                        row_slice[i..i + 4].copy_from_slice(&packed_px);
+                        i += 4;
+                    }
+                }
+            },
+        );
+
+        // Update texture dimensions and clear dirty flag
+        self.rasterized_texture.width = width;
+        self.rasterized_texture.height = height;
+        self.raster_dirty = false;
+
+        true
+    }
+
+    /// Updates the internal scale factor in params; will trigger reshape on next recalc if changed.
+    pub fn set_scale_factor(&mut self, scale: f32) {
+        self.params.set_scale_factor(scale);
     }
 
     fn copy_selected_text(&mut self) -> ActionResult {
@@ -1196,8 +1378,11 @@ impl<T> TextState<T> {
         if self.is_selectable || self.is_editable {
             self.reset_selection();
 
-            let byte_offset_cursor =
-                char_under_position(&self.buffer, click_position_relative_to_area)?;
+            let byte_offset_cursor = char_under_position(
+                &self.buffer,
+                click_position_relative_to_area,
+                self.params.scale_factor(),
+            )?;
             self.update_cursor_before_glyph_with_cursor(byte_offset_cursor);
 
             // Reset selection to start at the press location
@@ -1244,8 +1429,11 @@ impl<T> TextState<T> {
             return None;
         }
         if self.is_selectable {
-            let byte_cursor_under_position =
-                char_under_position(&self.buffer, pointer_relative_position)?;
+            let byte_cursor_under_position = char_under_position(
+                &self.buffer,
+                pointer_relative_position,
+                self.params.scale_factor(),
+            )?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
                 self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
@@ -1362,4 +1550,14 @@ impl UpdateReason {
                 | UpdateReason::DeletedTextAtCursor
         )
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AlphaMode {
+    /// Use premultiplied alpha for rendering. This is generally preferred for performance
+    /// and quality, especially when blending with other premultiplied content.
+    Premultiplied,
+    /// Use unmultiplied alpha for rendering. This may be necessary when compositing
+    /// with non-premultiplied content, but can lead to artifacts and is less efficient.
+    Unmultiplied,
 }

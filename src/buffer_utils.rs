@@ -27,12 +27,15 @@ pub(crate) fn vertical_offset(
     }
 }
 
+/// Ensures the caret is vertically visible by adjusting buffer scroll using DEVICE pixels.
+/// Returns caret top-left in LOGICAL pixels relative to the viewport.
 pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
     buffer: &mut Buffer,
     current_char_byte_cursor: ByteCursor,
     font_system: &mut FontSystem,
     text_area_size: Size,
     style: &TextStyle,
+    scale_factor: f32,
 ) -> Option<Point> {
     let mut editor = Editor::new(&mut *buffer);
     editor.set_cursor(current_char_byte_cursor.cursor);
@@ -41,22 +44,29 @@ pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
 
     match caret_position {
         Some(position) => {
+            // caret position from cosmic_text is in DEVICE pixels
             let mut caret_top_left_corner = Point::from(position);
             let mut scroll = buffer.scroll();
-            let line_height = style.line_height_pt();
+            let scale = scale_factor.max(0.01);
+            let line_height_device = style.line_height_pt() * scale;
+            let text_area_height_device = text_area_size.y * scale;
 
             // If the caret is not fully visible, we need to scroll it into view
             if caret_top_left_corner.y < 0.0 {
                 scroll.vertical += caret_top_left_corner.y;
                 caret_top_left_corner.y = 0.0;
                 buffer.set_scroll(scroll);
-            } else if caret_top_left_corner.y + line_height > text_area_size.y {
-                scroll.vertical += caret_top_left_corner.y + line_height - text_area_size.y;
-                caret_top_left_corner.y = text_area_size.y - line_height;
+            } else if caret_top_left_corner.y + line_height_device > text_area_height_device {
+                scroll.vertical +=
+                    caret_top_left_corner.y + line_height_device - text_area_height_device;
+                caret_top_left_corner.y = text_area_height_device - line_height_device;
                 buffer.set_scroll(scroll);
             }
-
-            Some(caret_top_left_corner)
+            // Convert caret position back to LOGICAL pixels for the API
+            Some(Point::new(
+                caret_top_left_corner.x / scale,
+                caret_top_left_corner.y / scale,
+            ))
         }
         None => {
             // Caret is not visible, we need to shape the text and move the scroll
@@ -82,20 +92,27 @@ pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
             //         }
             //     });
             // }
-            editor.cursor_position().map(Point::from)
+            // Return caret position in LOGICAL pixels
+            editor.cursor_position().map(|p| {
+                let p = Point::from(p);
+                let scale = scale_factor.max(0.01);
+                Point::new(p.x / scale, p.y / scale)
+            })
         }
     }
 }
 
+/// Hit-test a character under a LOGICAL pixel coordinate, accounting for scroll and scale.
 pub fn char_under_position(
     buffer: &Buffer,
     interaction_position_relative_to_element: Point,
+    scale_factor: f32,
 ) -> Option<Cursor> {
-    let horizontal_scroll = buffer.scroll().horizontal;
-    buffer.hit(
-        interaction_position_relative_to_element.x + horizontal_scroll,
-        interaction_position_relative_to_element.y,
-    )
+    let horizontal_scroll_device = buffer.scroll().horizontal;
+    let scale = scale_factor.max(0.01);
+    let x_device = interaction_position_relative_to_element.x * scale + horizontal_scroll_device;
+    let y_device = interaction_position_relative_to_element.y * scale;
+    buffer.hit(x_device, y_device)
 }
 
 /// Returns inner buffer dimensions
@@ -113,13 +130,15 @@ pub(crate) fn update_buffer(
     let metadata = params.metadata();
     let old_scroll = buffer.scroll();
 
+    let scale_factor = params.scale_factor();
     buffer.set_metrics(font_system, params.metrics());
     buffer.set_wrap(font_system, wrap.into());
 
     // Setting vertical size to None means that the buffer will use the height of the text.
     // This is needed to ensue that glyphs can be scrolled vertically by smaller amounts than
     // the line height.
-    buffer.set_size(font_system, Some(text_area_size.x), None);
+    // Apply scale for shaping to device pixels
+    buffer.set_size(font_system, Some(text_area_size.x * scale_factor), None);
 
     buffer.set_text(
         font_system,
@@ -137,8 +156,8 @@ pub(crate) fn update_buffer(
         for layout_line in line
             .layout(
                 font_system,
-                text_style.font_size.value(),
-                Some(text_area_size.x),
+                text_style.font_size.value() * scale_factor,
+                Some(text_area_size.x * scale_factor),
                 text_style.wrap.unwrap_or_default().into(),
                 None,
                 // TODO: what is the default tab width? Make it configurable?
@@ -148,12 +167,12 @@ pub(crate) fn update_buffer(
         {
             buffer_measurement.y += layout_line
                 .line_height_opt
-                .unwrap_or(text_style.line_height_pt());
+                .unwrap_or(text_style.line_height_pt() * scale_factor);
             buffer_measurement.x = buffer_measurement.x.max(layout_line.w);
         }
     }
 
-    if buffer_measurement.x > text_area_size.x {
+    if buffer_measurement.x > text_area_size.x * scale_factor {
         // If the buffer is smaller than the text area, we need to set the width to the text area
         // size to ensure that the text is centered.
         // After we've measured the buffer, we need to run layout() again to realign the lines
@@ -162,7 +181,7 @@ pub(crate) fn update_buffer(
             line.set_align(horizontal_alignment.into());
             line.layout(
                 font_system,
-                text_style.font_size.value(),
+                text_style.font_size.value() * scale_factor,
                 Some(buffer_measurement.x),
                 wrap.into(),
                 None,
@@ -173,5 +192,9 @@ pub(crate) fn update_buffer(
     }
 
     buffer.set_scroll(old_scroll);
-    buffer_measurement
+    // We shaped at device pixels; convert inner_dimensions back to logical for API
+    Size::from((
+        buffer_measurement.x / scale_factor,
+        buffer_measurement.y / scale_factor,
+    ))
 }

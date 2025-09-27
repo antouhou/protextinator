@@ -1,6 +1,6 @@
 [package]
 name = "protextinator"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Text management, made simple"
 keywords = ["text", "rendering", "gui", "graphics", "image"]
@@ -22,7 +22,8 @@ smol_str = "0.3"
 serde = { version = "1.0.219", features = ["derive"], optional = true }
 
 [dev-dependencies]
-grafo = "0.7"
+grafo = "0.9"
+#grafo = { path = "../grafo" }
 winit = "0.30"
 futures = "0.3"
 env_logger = "0.11"
