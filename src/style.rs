@@ -180,7 +180,7 @@ impl FontColor {
     ///
     /// let color = FontColor::new(Color::rgb(255, 0, 0));
     /// ```
-    pub fn new(color: Color) -> Self {
+    pub const fn new(color: Color) -> Self {
         Self(color)
     }
 
@@ -199,7 +199,7 @@ impl FontColor {
     /// let green = FontColor::rgb(0, 255, 0);
     /// let blue = FontColor::rgb(0, 0, 255);
     /// ```
-    pub fn rgb(r: u8, g: u8, b: u8) -> Self {
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self(Color::rgb(r, g, b))
     }
 
@@ -218,7 +218,7 @@ impl FontColor {
     /// let semi_transparent_red = FontColor::rgba(255, 0, 0, 128);
     /// let opaque_blue = FontColor::rgba(0, 0, 255, 255);
     /// ```
-    pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self(Color::rgba(r, g, b, a))
     }
 }
