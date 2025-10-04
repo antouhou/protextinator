@@ -89,7 +89,7 @@ impl FontSize {
     /// let font_size = FontSize::new(16.0);
     /// assert_eq!(font_size.value(), 16.0);
     /// ```
-    pub fn new(size: f32) -> Self {
+    pub const fn new(size: f32) -> Self {
         Self(size)
     }
 
@@ -102,7 +102,7 @@ impl FontSize {
     /// let font_size = FontSize::new(14.0);
     /// assert_eq!(font_size.value(), 14.0);
     /// ```
-    pub fn value(&self) -> f32 {
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -295,7 +295,7 @@ impl FontFamily {
     ///
     /// let sans_serif = FontFamily::sans_serif();
     /// ```
-    pub fn sans_serif() -> Self {
+    pub const fn sans_serif() -> Self {
         Self::SansSerif
     }
 
@@ -307,7 +307,7 @@ impl FontFamily {
     ///
     /// let serif = FontFamily::serif();
     /// ```
-    pub fn serif() -> Self {
+    pub const fn serif() -> Self {
         Self::Serif
     }
 
@@ -319,7 +319,7 @@ impl FontFamily {
     ///
     /// let monospace = FontFamily::monospace();
     /// ```
-    pub fn monospace() -> Self {
+    pub const fn monospace() -> Self {
         Self::Monospace
     }
 
@@ -384,7 +384,7 @@ pub enum HorizontalTextAlignment {
 }
 
 impl HorizontalTextAlignment {
-    pub fn is_centered(&self) -> bool {
+    pub const fn is_centered(&self) -> bool {
         matches!(self, HorizontalTextAlignment::Center)
     }
 }
@@ -476,10 +476,10 @@ impl TextStyle {
     ///
     /// let style = TextStyle::new(14.0, Color::rgb(0, 0, 0));
     /// ```
-    pub fn new(font_size: f32, font_color: Color) -> Self {
+    pub const fn new(font_size: f32, font_color: Color) -> Self {
         Self {
-            font_size: font_size.into(),
-            line_height: LineHeight::default(),
+            font_size: FontSize(font_size),
+            line_height: LineHeight::DEFAULT,
             font_color: FontColor(font_color),
             horizontal_alignment: HorizontalTextAlignment::Start,
             vertical_alignment: VerticalTextAlignment::Start,
@@ -499,8 +499,8 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_font_size(18.0);
     /// ```
-    pub fn with_font_size(mut self, font_size: f32) -> Self {
-        self.font_size = font_size.into();
+    pub const fn with_font_size(mut self, font_size: f32) -> Self {
+        self.font_size = FontSize(font_size);
         self
     }
 
@@ -515,8 +515,8 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_line_height(1.2);
     /// ```
-    pub fn with_line_height(mut self, line_height: f32) -> Self {
-        self.line_height = line_height.into();
+    pub const fn with_line_height(mut self, line_height: f32) -> Self {
+        self.line_height = LineHeight(line_height);
         self
     }
 
@@ -531,8 +531,8 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_font_color(FontColor::rgb(255, 0, 0));
     /// ```
-    pub fn with_font_color(mut self, font_color: impl Into<FontColor>) -> Self {
-        self.font_color = font_color.into();
+    pub const fn with_font_color(mut self, font_color: FontColor) -> Self {
+        self.font_color = font_color;
         self
     }
 
@@ -547,7 +547,7 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_horizontal_alignment(HorizontalTextAlignment::Center);
     /// ```
-    pub fn with_horizontal_alignment(mut self, alignment: HorizontalTextAlignment) -> Self {
+    pub const fn with_horizontal_alignment(mut self, alignment: HorizontalTextAlignment) -> Self {
         self.horizontal_alignment = alignment;
         self
     }
@@ -563,7 +563,7 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_vertical_alignment(VerticalTextAlignment::Center);
     /// ```
-    pub fn with_vertical_alignment(mut self, alignment: VerticalTextAlignment) -> Self {
+    pub const fn with_vertical_alignment(mut self, alignment: VerticalTextAlignment) -> Self {
         self.vertical_alignment = alignment;
         self
     }
@@ -583,7 +583,7 @@ impl TextStyle {
     ///     VerticalTextAlignment::Center
     /// );
     /// ```
-    pub fn with_alignment(
+    pub const fn with_alignment(
         mut self,
         horizontal: HorizontalTextAlignment,
         vertical: VerticalTextAlignment,
@@ -604,7 +604,7 @@ impl TextStyle {
     ///
     /// let style = TextStyle::default().with_wrap(TextWrap::Wrap);
     /// ```
-    pub fn with_wrap(mut self, wrap: TextWrap) -> Self {
+    pub const fn with_wrap(mut self, wrap: TextWrap) -> Self {
         self.wrap = Some(wrap);
         self
     }
@@ -622,7 +622,7 @@ impl TextStyle {
     /// assert_eq!(style.line_height_pt(), 24.0); // 16.0 * 1.5
     /// ```
     #[inline(always)]
-    pub fn line_height_pt(&self) -> f32 {
+    pub const fn line_height_pt(&self) -> f32 {
         self.line_height.0 * self.font_size.0
     }
 }
