@@ -33,7 +33,7 @@ impl Rect {
     /// assert_eq!(rect.height(), 50.0);
     /// ```
     #[inline(always)]
-    pub fn new(min: Point, max: Point) -> Self {
+    pub const fn new(min: Point, max: Point) -> Self {
         Self { min, max }
     }
 
@@ -47,7 +47,7 @@ impl Rect {
     /// assert_eq!(rect.height(), 50.0);
     /// ```
     #[inline(always)]
-    pub fn height(&self) -> f32 {
+    pub const fn height(&self) -> f32 {
         self.max.y - self.min.y
     }
 
@@ -61,7 +61,7 @@ impl Rect {
     /// assert_eq!(rect.width(), 100.0);
     /// ```
     #[inline(always)]
-    pub fn width(&self) -> f32 {
+    pub const fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
 
@@ -75,7 +75,7 @@ impl Rect {
     /// assert_eq!(rect.size(), (100.0, 50.0));
     /// ```
     #[inline(always)]
-    pub fn size(&self) -> (f32, f32) {
+    pub const fn size(&self) -> (f32, f32) {
         (self.width(), self.height())
     }
 }
@@ -127,7 +127,7 @@ impl Point {
     /// assert_eq!(point.x, 10.0);
     /// assert_eq!(point.y, 20.0);
     /// ```
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
@@ -141,7 +141,7 @@ impl Point {
     /// assert_eq!(point.to_tuple(), (10.0, 20.0));
     /// ```
     #[inline(always)]
-    pub fn to_tuple(self) -> (f32, f32) {
+    pub const fn to_tuple(self) -> (f32, f32) {
         (self.x, self.y)
     }
 
@@ -164,7 +164,7 @@ impl Point {
     /// assert!(!p1.approx_eq(&p2, 0.0001));
     /// ```
     #[inline(always)]
-    pub fn approx_eq(&self, other: &Self, epsilon: f32) -> bool {
+    pub const fn approx_eq(&self, other: &Self, epsilon: f32) -> bool {
         (self.x - other.x).abs() <= epsilon && (self.y - other.y).abs() <= epsilon
     }
 }

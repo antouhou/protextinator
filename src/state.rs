@@ -73,7 +73,7 @@ impl Selection {
     /// assert!(selection.is_empty());
     /// ```
     #[inline(always)]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.origin_character_byte_cursor.is_none()
             || self.ends_before_character_byte_cursor.is_none()
     }
@@ -235,7 +235,7 @@ impl<T> TextState<T> {
     /// # let state = TextState::new_with_text("", &mut font_system, ());
     /// let width = state.caret_width();
     /// ```
-    pub fn caret_width(&self) -> f32 {
+    pub const fn caret_width(&self) -> f32 {
         self.caret_width
     }
 
@@ -454,7 +454,7 @@ impl<T> TextState<T> {
     /// let inner_size = state.inner_size();
     /// println!("Text content size: {}x{}", inner_size.x, inner_size.y);
     /// ```
-    pub fn inner_size(&self) -> Size {
+    pub const fn inner_size(&self) -> Size {
         self.inner_dimensions
     }
 
