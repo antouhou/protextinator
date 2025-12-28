@@ -162,8 +162,9 @@ impl<TMetadata> TextManager<TMetadata> {
     ///
     /// let mut manager: TextManager<()> = TextManager::new();
     ///
+    /// let mut removed_ids = Vec::new();
     /// // At the end of each frame
-    /// manager.end_frame();
+    /// manager.end_frame(&mut removed_ids);
     /// ```
     pub fn end_frame(&mut self, removed_ids: &mut Vec<Id>) {
         let accessed_states = self.text_context.usage_tracker.accessed_states();

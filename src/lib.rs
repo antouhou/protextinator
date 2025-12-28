@@ -57,8 +57,9 @@
 //!     let inner_size = state.inner_size();
 //! }
 //!
+//! let mut remove_ids = vec![];
 //! // Optional: going to remove all states that were not accessed during the current frame
-//! text_manager.end_frame();
+//! text_manager.end_frame(&mut remove_ids);
 //! ```
 
 mod action;
