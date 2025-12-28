@@ -167,14 +167,13 @@ impl<TMetadata> TextManager<TMetadata> {
     /// ```
     pub fn end_frame(&mut self, removed_ids: &mut Vec<Id>) {
         let accessed_states = self.text_context.usage_tracker.accessed_states();
-        self.text_states
-            .retain(|id, _| {
-                let accessed = accessed_states.contains(id);
-                if !accessed {
-                    removed_ids.push(*id);
-                }
-                accessed
-            });
+        self.text_states.retain(|id, _| {
+            let accessed = accessed_states.contains(id);
+            if !accessed {
+                removed_ids.push(*id);
+            }
+            accessed
+        });
     }
 
     /// Sets the global scale factor used for shaping and rasterization.
