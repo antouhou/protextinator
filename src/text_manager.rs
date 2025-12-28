@@ -152,6 +152,7 @@ impl<TMetadata> TextManager<TMetadata> {
     /// Utility to do some simple garbage collection of text states if you don't want
     /// to implement a usage tracker yourself. Call this at the end of each frame, and this will
     /// remove any text states not marked as accessed since the last call to `start_frame`.
+    /// Accepts a mutable vector to which it will append the IDs of removed text states.
     ///
     /// This helps prevent memory leaks when text states are no longer needed.
     ///
@@ -164,10 +165,16 @@ impl<TMetadata> TextManager<TMetadata> {
     /// // At the end of each frame
     /// manager.end_frame();
     /// ```
-    pub fn end_frame(&mut self) {
+    pub fn end_frame(&mut self, removed_ids: &mut Vec<Id>) {
         let accessed_states = self.text_context.usage_tracker.accessed_states();
         self.text_states
-            .retain(|id, _| accessed_states.contains(id));
+            .retain(|id, _| {
+                let accessed = accessed_states.contains(id);
+                if !accessed {
+                    removed_ids.push(*id);
+                }
+                accessed
+            });
     }
 
     /// Sets the global scale factor used for shaping and rasterization.
