@@ -14,6 +14,7 @@ pub(crate) struct TextParams {
     scale_factor: f32,
 
     changed: bool,
+    font_query_changed: bool,
     line_terminator_has_been_added: bool,
 }
 
@@ -28,6 +29,7 @@ impl TextParams {
             scale_factor: 1.0,
 
             changed: true,
+            font_query_changed: true,
             line_terminator_has_been_added: false,
         };
 
@@ -113,10 +115,24 @@ impl TextParams {
     }
 
     #[inline(always)]
+    pub fn font_query_changed_since_last_shape(&self) -> bool {
+        self.font_query_changed
+    }
+
+    #[inline(always)]
+    pub fn reset_font_query_changed(&mut self) {
+        self.font_query_changed = false;
+    }
+
+    #[inline(always)]
     pub fn set_text(&mut self, text: &str) {
         if self.original_text() != text {
             self.text = text.into();
-            if !self.text.ends_with('\n') {
+            // TODO: move that to the insertion of the newline - this will cause shenanigans
+            //  if text is one line right now, but you intend to add a newline later
+            let is_one_line = !self.text.contains('\n');
+            let ends_with_line_terminator = !self.text.ends_with('\n');
+            if !is_one_line && !ends_with_line_terminator {
                 // Ensure the text always ends with a line terminator. If the text does not end with
                 // a newline, you'll need to add two newline characters to insert a new line at the
                 // end of the text.
@@ -139,6 +155,11 @@ impl TextParams {
 
     #[inline(always)]
     pub fn set_style(&mut self, style: &TextStyle) {
+        let font_query_changed =
+            self.style.font_family != style.font_family || self.style.weight != style.weight;
+        if font_query_changed {
+            self.font_query_changed = true;
+        }
         if &self.style != style {
             self.style = style.clone();
             self.changed = true;

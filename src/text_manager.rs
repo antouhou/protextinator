@@ -3,6 +3,7 @@
 //! This module provides high-level management of multiple text states, font loading,
 //! and resource tracking for text rendering systems.
 
+use crate::font_family_query::FontFamilyCache;
 use crate::state::{AlphaMode, TextState};
 use crate::Id;
 use ahash::{HashMap, HashSet, HashSetExt};
@@ -22,6 +23,8 @@ pub struct TextContext {
     pub scale_factor: f32,
     /// Tracks which text states are being used for garbage collection.
     pub usage_tracker: TextUsageTracker,
+    /// Cache for resolved font family queries.
+    pub font_family_cache: FontFamilyCache,
 }
 
 impl Default for TextContext {
@@ -32,6 +35,7 @@ impl Default for TextContext {
             swash_cache: SwashCache::new(),
             scale_factor: 1.0,
             usage_tracker: TextUsageTracker::new(),
+            font_family_cache: FontFamilyCache::new(),
         }
     }
 }

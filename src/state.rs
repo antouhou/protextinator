@@ -10,7 +10,7 @@ use crate::buffer_utils::{
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
-use crate::style::{TextStyle, VerticalTextAlignment};
+use crate::style::{FontFamily, TextStyle, VerticalTextAlignment};
 use crate::text_manager::TextContext;
 use crate::text_params::TextParams;
 use crate::utils::{linear_to_srgb_u8, srgb_to_linear_u8};
@@ -113,6 +113,7 @@ pub struct TextState<T> {
     relative_caret_position: Option<Point>,
     caret_width: f32,
     selection: Selection,
+    resolved_font_family: FontFamily,
 
     last_scroll_timestamp: Instant,
 
@@ -182,6 +183,8 @@ impl<T> TextState<T> {
 
             cursor: ByteCursor::default(),
             relative_caret_position: None,
+
+            resolved_font_family: FontFamily::SansSerif,
 
             selection: Selection::default(),
             last_scroll_timestamp: Instant::now(),
@@ -1055,9 +1058,23 @@ impl<T> TextState<T> {
     /// This method checks if any text parameters (content, style, size) have changed
     /// and only performs the expensive reshape operation if necessary.
     fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
+        let font_query_changed = self.params.font_query_changed_since_last_shape();
+        if font_query_changed {
+            let new_font_family = ctx.font_family_cache.resolve_font_family_query(
+                self.params.style().font_family_query(),
+                &mut ctx.font_system,
+            );
+            self.resolved_font_family = new_font_family;
+            self.params.reset_font_query_changed();
+        }
         let params_changed = self.params.changed_since_last_shape();
         if params_changed {
-            let new_size = update_buffer(&self.params, &mut self.buffer, &mut ctx.font_system);
+            let new_size = update_buffer(
+                &self.params,
+                &mut self.buffer,
+                &mut ctx.font_system,
+                &self.resolved_font_family,
+            );
             self.inner_dimensions = new_size;
             self.params.reset_changed();
             // Any layout/text/style/size change requires re-rasterization

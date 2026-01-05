@@ -5,6 +5,7 @@
 
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::hash::Hash;
 use std::{ops::Deref, sync::Arc};
 
 /// An efficient string type that can hold either borrowed static strings or owned arc strings.
@@ -12,7 +13,7 @@ use std::{ops::Deref, sync::Arc};
 /// This type is optimized for cases where strings are frequently either static string literals
 /// or shared owned strings. It avoids unnecessary allocations when dealing with static strings
 /// while providing reference counting for owned strings.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum ArcCowStr {
     /// A borrowed static string slice with 'static lifetime.
     Borrowed(&'static str),
@@ -68,6 +69,20 @@ impl Deref for ArcCowStr {
         }
     }
 }
+
+impl Hash for ArcCowStr {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.deref().hash(state);
+    }
+}
+
+impl PartialEq for ArcCowStr {
+    fn eq(&self, other: &Self) -> bool {
+        self.deref() == other.deref()
+    }
+}
+
+impl Eq for ArcCowStr {}
 
 #[cfg(feature = "serialization")]
 impl Serialize for ArcCowStr {

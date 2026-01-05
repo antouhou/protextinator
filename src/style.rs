@@ -3,6 +3,7 @@
 //! This module provides comprehensive text styling capabilities including fonts,
 //! colors, alignment, wrapping, and other visual properties for text rendering.
 
+use crate::font_family_query::FontFamilyQuery;
 use crate::utils::ArcCowStr;
 use cosmic_text::{Align, Color, Family};
 #[cfg(feature = "serialization")]
@@ -139,6 +140,46 @@ impl From<f32> for FontSize {
 }
 
 impl Eq for FontSize {}
+
+/// Represents the spacing between characters
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LetterSpacing(pub f32);
+
+impl Hash for LetterSpacing {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
+impl From<f32> for LetterSpacing {
+    /// Creates a `LetterSpacing` from a floating-point multiplier.
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::style::LetterSpacing;
+    ///
+    /// let line_height: LetterSpacing = 1.2.into();
+    /// assert_eq!(line_height.0, 1.2);
+    /// ```
+    fn from(value: f32) -> Self {
+        Self(value)
+    }
+}
+
+impl Eq for LetterSpacing {}
+
+impl From<LetterSpacing> for cosmic_text::LetterSpacing {
+    fn from(letter_spacing: LetterSpacing) -> Self {
+        cosmic_text::LetterSpacing(letter_spacing.0)
+    }
+}
+
+impl LetterSpacing {
+    pub const fn new(spacing: f32) -> Self {
+        Self(spacing)
+    }
+}
 
 /// Wrapper around [`cosmic_text::Color`] for text color representation.
 ///
@@ -336,29 +377,58 @@ impl FontFamily {
             FontFamily::Fantasy => Family::Fantasy,
         }
     }
+
+    /// Parses a string into a `FontFamily`.
+    ///
+    /// Recognizes standard family names like "serif", "sans-serif", "monospace", "cursive", and "fantasy".
+    /// Any other string is treated as a named font family.
+    ///
+    /// # Arguments
+    /// * `string` - The font family name as a string slice.
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::style::FontFamily;
+    ///
+    /// let serif = FontFamily::parse("serif");
+    /// let custom = FontFamily::parse("MyCustomFont");
+    /// ```
+    pub fn parse(string: &str) -> Self {
+        match string {
+            "serif" => Self::Serif,
+            "monospace" => Self::Monospace,
+            "cursive" => Self::Cursive,
+            "fantasy" => Self::Fantasy,
+            "sans-serif" => Self::SansSerif,
+            name => Self::Name(name.to_string().into()),
+        }
+    }
 }
 
-/// Comprehensive text styling configuration.
-///
-/// `TextStyle` combines all visual aspects of text rendering, including font properties,
-/// colors, alignment, and wrapping behavior
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TextStyle {
-    /// The font size in points.
-    pub font_size: FontSize,
-    /// The line height is a multiplier of the font size.
-    pub line_height: LineHeight,
-    /// The color of the text.
-    pub font_color: FontColor,
-    /// Horizontal text alignment within the container.
-    pub horizontal_alignment: HorizontalTextAlignment,
-    /// Vertical text alignment within the container.
-    pub vertical_alignment: VerticalTextAlignment,
-    /// Text wrapping behavior.
-    pub wrap: Option<TextWrap>,
-    /// The font family to use for rendering.
-    pub font_family: FontFamily,
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Weight(pub u16);
+
+impl Weight {
+    pub const THIN: Weight = Weight(100);
+    pub const EXTRA_LIGHT: Weight = Weight(200);
+    pub const LIGHT: Weight = Weight(300);
+    pub const NORMAL: Weight = Weight(400);
+    pub const MEDIUM: Weight = Weight(500);
+    pub const SEMIBOLD: Weight = Weight(600);
+    pub const BOLD: Weight = Weight(700);
+    pub const EXTRA_BOLD: Weight = Weight(800);
+    pub const BLACK: Weight = Weight(900);
+
+    pub fn new(weight: u16) -> Self {
+        Self(weight)
+    }
+}
+
+impl From<Weight> for cosmic_text::Weight {
+    fn from(weight: Weight) -> Self {
+        cosmic_text::Weight(weight.0)
+    }
 }
 
 /// Horizontal text alignment options.
@@ -422,6 +492,33 @@ pub enum VerticalTextAlignment {
     Center,
 }
 
+/// Comprehensive text styling configuration.
+///
+/// `TextStyle` combines all visual aspects of text rendering, including font properties,
+/// colors, alignment, and wrapping behavior
+#[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextStyle {
+    /// The font size in points.
+    pub font_size: FontSize,
+    /// The line height is a multiplier of the font size.
+    pub line_height: LineHeight,
+    /// The color of the text.
+    pub font_color: FontColor,
+    /// Horizontal text alignment within the container.
+    pub horizontal_alignment: HorizontalTextAlignment,
+    /// Vertical text alignment within the container.
+    pub vertical_alignment: VerticalTextAlignment,
+    /// Text wrapping behavior.
+    pub wrap: Option<TextWrap>,
+    /// The font family to use for rendering.
+    pub font_family: FontFamily,
+    /// The font weight to use for rendering.
+    pub weight: Weight,
+    /// The spacing between characters as a multiplier of the font size.
+    pub letter_spacing: Option<LetterSpacing>,
+}
+
 impl Hash for TextStyle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.font_size.hash(state);
@@ -459,6 +556,8 @@ impl TextStyle {
         vertical_alignment: VerticalTextAlignment::Start,
         wrap: None,
         font_family: FontFamily::SansSerif,
+        weight: Weight::NORMAL,
+        letter_spacing: None,
     };
 
     /// Creates a new `TextStyle` with the specified font size and color.
@@ -485,6 +584,8 @@ impl TextStyle {
             vertical_alignment: VerticalTextAlignment::Start,
             wrap: None,
             font_family: FontFamily::SansSerif,
+            weight: Weight::NORMAL,
+            letter_spacing: None,
         }
     }
 
@@ -624,5 +725,19 @@ impl TextStyle {
     #[inline(always)]
     pub const fn line_height_pt(&self) -> f32 {
         self.line_height.0 * self.font_size.0
+    }
+
+    pub(crate) fn font_family_query(&self) -> FontFamilyQuery {
+        FontFamilyQuery {
+            family_query_string: match &self.font_family {
+                FontFamily::Name(name) => name.clone(),
+                FontFamily::SansSerif => "sans-serif".into(),
+                FontFamily::Serif => "serif".into(),
+                FontFamily::Monospace => "monospace".into(),
+                FontFamily::Cursive => "cursive".into(),
+                FontFamily::Fantasy => "fantasy".into(),
+            },
+            weight: self.weight,
+        }
     }
 }
