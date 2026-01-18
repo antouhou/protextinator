@@ -218,17 +218,18 @@ pub fn test_insert_newline_at_end_of_text() {
         text_state.apply_action(&mut ctx, &Action::MoveCursorRight);
     }
 
-    // Verify cursor is at the end of the text
+    // Verify the cursor is at the end of the text
     assert_eq!(text_state.cursor_char_index(), Some(5));
     assert_eq!(text_state.text_char_len(), 5);
 
-    // Try to delete a character at the end of the text
-    // This should panic due to the bug
+    // Insert a newline at the end of the text
+    // cosmic_text quirk: we need to insert two newlines at the end of text that doesn't
+    // already end with a newline, so the caret can be placed on the new line
     let result = text_state.apply_action(&mut ctx, &Action::InsertChar("\n".into()));
 
     // The following assertions should not be reached if the code panics
     assert!(matches!(result, ActionResult::TextChanged));
-    assert_eq!(text_state.text_char_len(), 6);
-    assert_eq!(text_state.text(), "Hello\n");
+    assert_eq!(text_state.text_char_len(), 7);
+    assert_eq!(text_state.text(), "Hello\n\n");
     assert_eq!(text_state.cursor_char_index(), Some(6));
 }

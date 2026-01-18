@@ -133,7 +133,9 @@ impl<'a> App<'a> {
                 horizontal_alignment: HorizontalTextAlignment::Start,
                 vertical_alignment: VerticalTextAlignment::Start,
                 wrap: Some(TextWrap::Wrap),
-                font_family: FontFamily::SansSerif,
+                font_family: FontFamily::Name("Arial".into()),
+                weight: protextinator::style::Weight::NORMAL,
+                letter_spacing: None,
             };
 
             // Create or update the text state
@@ -191,6 +193,8 @@ impl<'a> App<'a> {
                     vertical_alignment: VerticalTextAlignment::Start,
                     wrap: Some(TextWrap::Wrap),
                     font_family: FontFamily::Serif,
+                    weight: protextinator::style::Weight::NORMAL,
+                    letter_spacing: None,
                 };
 
                 // Create or update the stats text state

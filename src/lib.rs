@@ -65,6 +65,7 @@
 mod action;
 mod buffer_utils;
 mod byte_cursor;
+mod font_family_query;
 mod id;
 pub mod math;
 mod state;

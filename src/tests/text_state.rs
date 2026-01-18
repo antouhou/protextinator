@@ -1,7 +1,7 @@
 use crate::math::Size;
 use crate::style::{
     FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
-    VerticalTextAlignment,
+    VerticalTextAlignment, Weight,
 };
 use crate::tests::mono_style_test;
 use crate::{Action, Point, TextContext, TextState};
@@ -20,6 +20,8 @@ fn mono_style_with_alignment(
         vertical_alignment: v_align,
         wrap: Some(TextWrap::NoWrap), // No wrapping to ensure a single line
         font_family: FontFamily::Monospace,
+        weight: Weight::NORMAL,
+        letter_spacing: None,
     }
 }
 
@@ -36,6 +38,8 @@ fn mono_style_with_wrap(
         vertical_alignment: v_align,
         wrap,
         font_family: FontFamily::Monospace,
+        weight: Weight::NORMAL,
+        letter_spacing: None,
     }
 }
 

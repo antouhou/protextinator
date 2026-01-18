@@ -1,6 +1,6 @@
 use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect, Size};
-use crate::style::{TextStyle, TextWrap, VerticalTextAlignment};
+use crate::style::{FontFamily, TextStyle, TextWrap, VerticalTextAlignment};
 use crate::text_params::TextParams;
 use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
 
@@ -120,13 +120,15 @@ pub(crate) fn update_buffer(
     params: &TextParams,
     buffer: &mut Buffer,
     font_system: &mut FontSystem,
+    font_family: &FontFamily,
 ) -> Size {
     let text_style = &params.style();
     let font_color = text_style.font_color;
     let horizontal_alignment = text_style.horizontal_alignment;
     let wrap = text_style.wrap.unwrap_or_default();
     let text_area_size = params.size();
-    let font_family = &text_style.font_family;
+    let weight = text_style.weight;
+    let letter_spacing = text_style.letter_spacing;
     let metadata = params.metadata();
     let old_scroll = buffer.scroll();
 
@@ -140,14 +142,22 @@ pub(crate) fn update_buffer(
     // Apply scale for shaping to device pixels
     buffer.set_size(font_system, Some(text_area_size.x * scale_factor), None);
 
+    let mut attrs = Attrs::new()
+        .color(font_color.into())
+        .family(font_family.to_fontdb_family())
+        .weight(weight.into())
+        .metadata(metadata);
+
+    if let Some(letter_spacing) = letter_spacing {
+        attrs = attrs.letter_spacing(letter_spacing.0 * scale_factor);
+    }
+
     buffer.set_text(
         font_system,
         params.text_for_internal_use(),
-        &Attrs::new()
-            .color(font_color.into())
-            .family(font_family.to_fontdb_family())
-            .metadata(metadata),
+        &attrs,
         Shaping::Advanced,
+        None,
     );
 
     let mut buffer_measurement = Size::default();
@@ -162,17 +172,25 @@ pub(crate) fn update_buffer(
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
+                cosmic_text::Hinting::Enabled,
             )
             .iter()
         {
-            buffer_measurement.y += layout_line
+            let line_height = layout_line
                 .line_height_opt
                 .unwrap_or(text_style.line_height_pt() * scale_factor);
+            buffer_measurement.y += line_height;
             buffer_measurement.x = buffer_measurement.x.max(layout_line.w);
         }
     }
 
     if buffer_measurement.x > text_area_size.x * scale_factor {
+        #[cfg(test)]
+        eprintln!(
+            "RELAYOUT: buffer_measurement.x={}, text_area_size.x * scale_factor={}",
+            buffer_measurement.x,
+            text_area_size.x * scale_factor
+        );
         // If the buffer is smaller than the text area, we need to set the width to the text area
         // size to ensure that the text is centered.
         // After we've measured the buffer, we need to run layout() again to realign the lines
@@ -187,6 +205,7 @@ pub(crate) fn update_buffer(
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
+                cosmic_text::Hinting::Enabled,
             );
         }
     }

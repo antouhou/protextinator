@@ -1,12 +1,13 @@
 use crate::style::{
     FontColor, FontFamily, FontSize, HorizontalTextAlignment, LineHeight, TextStyle, TextWrap,
-    VerticalTextAlignment,
+    VerticalTextAlignment, Weight,
 };
 use cosmic_text::Color;
 
 mod byte_offset;
 mod caret_positioning;
 mod copy_selected_text;
+mod resolved_font_family;
 mod serialization;
 mod text_state;
 
@@ -19,5 +20,7 @@ fn mono_style_test() -> TextStyle {
         vertical_alignment: VerticalTextAlignment::Start,
         wrap: Some(TextWrap::NoWrap), // No wrapping to ensure a single line
         font_family: FontFamily::Monospace,
+        weight: Weight::NORMAL,
+        letter_spacing: None,
     }
 }
