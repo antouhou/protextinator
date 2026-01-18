@@ -367,6 +367,25 @@ impl<T> TextState<T> {
         self.params.style()
     }
 
+    /// Returns the resolved font family after font matching has been performed.
+    ///
+    /// This may differ from the font family in the style if font substitution occurred.
+    ///
+    /// # Returns
+    /// A reference to the resolved font family
+    ///
+    /// # Examples
+    /// ```
+    /// # use protextinator::TextState;
+    /// # use cosmic_text::FontSystem;
+    /// # let mut font_system = FontSystem::new();
+    /// # let state = TextState::new_with_text("", &mut font_system, ());
+    /// let resolved = state.resolved_font_family();
+    /// ```
+    pub fn resolved_font_family(&self) -> &FontFamily {
+        &self.resolved_font_family
+    }
+
     /// Sets the visible area of the text buffer. This is going to be used to determine the buffer's
     /// viewport size and how much text is visible.
     ///

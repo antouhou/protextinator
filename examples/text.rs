@@ -266,11 +266,11 @@ impl<'a> App<'a> {
                     }
                     let upload_time = t_upload_start.elapsed();
 
-                    // println!(
-                    //     "rasterize: {} µs, load_texture: {} µs",
-                    //     raster_time.as_micros(),
-                    //     upload_time.as_micros()
-                    // );
+                    println!(
+                        "rasterize: {} µs, load_texture: {} µs",
+                        raster_time.as_micros(),
+                        upload_time.as_micros()
+                    );
 
                     // TODO: cache shapes
                     let text_shape_id = renderer.add_shape(

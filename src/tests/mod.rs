@@ -9,6 +9,7 @@ mod caret_positioning;
 mod copy_selected_text;
 mod serialization;
 mod text_state;
+mod resolved_font_family;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {

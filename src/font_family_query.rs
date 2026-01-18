@@ -50,15 +50,28 @@ impl FontFamilyCache {
         }
 
         for family in query.split_families() {
-            let res = font_system.db().query(&fontdb::Query {
-                families: &[family.to_fontdb_family()],
-                weight: fontdb::Weight::NORMAL,
-                ..Default::default()
-            });
-            if res.is_some() {
-                self.font_family_query_to_resolved_family_cache
-                    .insert(query.clone(), family.clone());
-                return family;
+            // Generic families (Monospace, SansSerif, Serif, etc.) should always be available
+            // Don't query the database for them, just return them directly
+            match &family {
+                FontFamily::Monospace | FontFamily::SansSerif | FontFamily::Serif 
+                | FontFamily::Cursive | FontFamily::Fantasy => {
+                    self.font_family_query_to_resolved_family_cache
+                        .insert(query.clone(), family.clone());
+                    return family;
+                }
+                FontFamily::Name(_) => {
+                    // For named fonts, query the database
+                    let res = font_system.db().query(&fontdb::Query {
+                        families: &[family.to_fontdb_family()],
+                        weight: fontdb::Weight::NORMAL,
+                        ..Default::default()
+                    });
+                    if res.is_some() {
+                        self.font_family_query_to_resolved_family_cache
+                            .insert(query.clone(), family.clone());
+                        return family;
+                    }
+                }
             }
         }
 

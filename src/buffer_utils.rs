@@ -142,21 +142,6 @@ pub(crate) fn update_buffer(
     // Apply scale for shaping to device pixels
     buffer.set_size(font_system, Some(text_area_size.x * scale_factor), None);
 
-    // match font_family {
-    //     FontFamily::Name(name) => {
-    //         println!("Using font family: {:?}", name);
-    //     }
-    //     FontFamily::SansSerif => {}
-    //     FontFamily::Serif => {}
-    //     FontFamily::Monospace => {}
-    //     FontFamily::Cursive => {}
-    //     FontFamily::Fantasy => {}
-    // }
-
-    if params.original_text() == "Filobus" {
-        println!("Font family: {:?}", font_family);
-    }
-
     let mut attrs = Attrs::new()
         .color(font_color.into())
         .family(font_family.to_fontdb_family())
@@ -200,6 +185,8 @@ pub(crate) fn update_buffer(
     }
 
     if buffer_measurement.x > text_area_size.x * scale_factor {
+        #[cfg(test)]
+        eprintln!("RELAYOUT: buffer_measurement.x={}, text_area_size.x * scale_factor={}", buffer_measurement.x, text_area_size.x * scale_factor);
         // If the buffer is smaller than the text area, we need to set the width to the text area
         // size to ensure that the text is centered.
         // After we've measured the buffer, we need to run layout() again to realign the lines
