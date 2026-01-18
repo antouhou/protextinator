@@ -186,7 +186,11 @@ pub(crate) fn update_buffer(
 
     if buffer_measurement.x > text_area_size.x * scale_factor {
         #[cfg(test)]
-        eprintln!("RELAYOUT: buffer_measurement.x={}, text_area_size.x * scale_factor={}", buffer_measurement.x, text_area_size.x * scale_factor);
+        eprintln!(
+            "RELAYOUT: buffer_measurement.x={}, text_area_size.x * scale_factor={}",
+            buffer_measurement.x,
+            text_area_size.x * scale_factor
+        );
         // If the buffer is smaller than the text area, we need to set the width to the text area
         // size to ensure that the text is centered.
         // After we've measured the buffer, we need to run layout() again to realign the lines

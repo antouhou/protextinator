@@ -542,8 +542,23 @@ impl<T> TextState<T> {
     }
 
     fn insert_char_at_cursor(&mut self, character: char, ctx: &mut TextContext) -> ActionResult {
-        self.params
-            .insert_char(self.cursor.byte_character_start, character);
+        let text = self.params.text_for_internal_use();
+        let at_end = self.cursor.byte_character_start >= text.len();
+        let ends_with_newline = text.ends_with('\n');
+
+        // cosmic_text quirk: when inserting a newline at the end of text that doesn't
+        // already end with a newline, we need to insert two newlines so the caret can
+        // be placed on the new line
+        if character == '\n' && at_end && !ends_with_newline {
+            self.params
+                .insert_char(self.cursor.byte_character_start, '\n');
+            self.params
+                .insert_char(self.cursor.byte_character_start + 1, '\n');
+        } else {
+            self.params
+                .insert_char(self.cursor.byte_character_start, character);
+        }
+
         self.reshape_if_params_changed(ctx);
         self.move_cursor(ctx, Motion::Next);
 

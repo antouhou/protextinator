@@ -7,9 +7,9 @@ use cosmic_text::Color;
 mod byte_offset;
 mod caret_positioning;
 mod copy_selected_text;
+mod resolved_font_family;
 mod serialization;
 mod text_state;
-mod resolved_font_family;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {

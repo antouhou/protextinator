@@ -53,8 +53,11 @@ impl FontFamilyCache {
             // Generic families (Monospace, SansSerif, Serif, etc.) should always be available
             // Don't query the database for them, just return them directly
             match &family {
-                FontFamily::Monospace | FontFamily::SansSerif | FontFamily::Serif 
-                | FontFamily::Cursive | FontFamily::Fantasy => {
+                FontFamily::Monospace
+                | FontFamily::SansSerif
+                | FontFamily::Serif
+                | FontFamily::Cursive
+                | FontFamily::Fantasy => {
                     self.font_family_query_to_resolved_family_cache
                         .insert(query.clone(), family.clone());
                     return family;
