@@ -284,7 +284,8 @@ impl From<FontColor> for Color {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FontFamily {
     /// A specific named font family. Have to be loaded into the font system with
-    /// [`crate::TextManager::load_fonts`].
+    /// [`crate::TextManager::load_fonts`]. This can be a CSS-like font family query, i.e.
+    /// "Helvetica, 'Segoe UI', sans-serif", for example.
     Name(ArcCowStr),
     /// Generic sans-serif font family (e.g., Arial, Helvetica).
     SansSerif,
@@ -323,6 +324,7 @@ impl FontFamily {
     ///
     /// let arial = FontFamily::new("Arial");
     /// let custom_font = FontFamily::new("MyCustomFont".to_string());
+    /// let css_like_font_family_query = FontFamily::new("Helvetica, 'Segoe UI', sans-serif");
     /// ```
     pub fn new(family: impl Into<ArcCowStr>) -> Self {
         Self::Name(family.into())
@@ -511,7 +513,9 @@ pub struct TextStyle {
     pub vertical_alignment: VerticalTextAlignment,
     /// Text wrapping behavior.
     pub wrap: Option<TextWrap>,
-    /// The font family to use for rendering.
+    /// The font family to use for rendering. Can be a generic family created with an enum, or
+    /// you can use a CSS-like font family query string to specify custom fonts:
+    /// `"Helvetica, 'Segoe UI', sans-serif".into()`.
     pub font_family: FontFamily,
     /// The font weight to use for rendering.
     pub weight: Weight,
