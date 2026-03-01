@@ -5,8 +5,8 @@
 
 use crate::action::{Action, ActionResult};
 use crate::buffer_utils::{
-    adjust_vertical_scroll_to_make_caret_visible, char_under_position, update_buffer,
-    vertical_offset,
+    adjust_vertical_scroll_to_make_caret_visible, char_under_position,
+    cursor_position_with_trailing_space_fallback, update_buffer, vertical_offset,
 };
 use crate::byte_cursor::ByteCursor;
 use crate::math::Size;
@@ -958,17 +958,15 @@ impl<T> TextState<T> {
         // Return caret position in LOGICAL pixels relative to viewport
         let horizontal_scroll_device = self.buffer.scroll().horizontal;
         let scale = self.params.scale_factor().max(0.01);
-        let mut editor = Editor::new(&mut self.buffer);
-        editor.set_cursor(self.cursor.cursor);
-
-        editor.cursor_position().map(|pos| {
-            // pos from cosmic_text is in DEVICE pixels
-            let mut point_device = Point::from(pos);
-            // Adjust by horizontal scroll (device px)
-            point_device.x -= horizontal_scroll_device;
-            // Convert to logical
-            Point::new(point_device.x / scale, point_device.y / scale)
-        })
+        cursor_position_with_trailing_space_fallback(&mut self.buffer, self.cursor).map(
+            |mut point_device| {
+                // pos from cosmic_text is in DEVICE pixels
+                // Adjust by horizontal scroll (device px)
+                point_device.x -= horizontal_scroll_device;
+                // Convert to logical
+                Point::new(point_device.x / scale, point_device.y / scale)
+            },
+        )
     }
 
     fn align_vertically(&mut self) {
@@ -1159,23 +1157,61 @@ impl<T> TextState<T> {
         let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
         let text_width = width;
         let text_height = height;
+        let horizontal_scroll_device = self.buffer.scroll().horizontal.round() as i64;
         // TODO: make an atlas via an adapter trait or something that can be passed to here from the renderer
         self.buffer.draw(
             &mut ctx.font_system,
             &mut ctx.swash_cache,
             base_color,
             |x, y, mut w, mut h, color| {
-                // Clip to buffer bounds
-                let (x0, y0) = ((x as u32).min(text_width), (y as u32).min(text_height));
-                if x0 >= text_width || y0 >= text_height || w == 0 || h == 0 {
+                if w == 0 || h == 0 {
                     return;
                 }
-                if x0 + w > text_width {
-                    w = text_width - x0;
+
+                // Use signed clipping first because scrolled glyphs can produce negative device
+                // coordinates. Casting negatives to unsigned would incorrectly wrap and skip
+                // visible glyph portions near the viewport edge.
+                // Cosmic-text horizontal scroll is not reflected in draw callback coordinates,
+                // so apply it explicitly here to keep rasterized output in sync with the buffer.
+                let mut x_device = x as i64 - horizontal_scroll_device;
+                let mut y_device = y as i64;
+                let mut width_device = w as i64;
+                let mut height_device = h as i64;
+
+                if x_device < 0 {
+                    let cut = -x_device;
+                    if cut >= width_device {
+                        return;
+                    }
+                    x_device = 0;
+                    width_device -= cut;
                 }
-                if y0 + h > text_height {
-                    h = text_height - y0;
+                if y_device < 0 {
+                    let cut = -y_device;
+                    if cut >= height_device {
+                        return;
+                    }
+                    y_device = 0;
+                    height_device -= cut;
                 }
+
+                if x_device >= text_width as i64 || y_device >= text_height as i64 {
+                    return;
+                }
+                let max_width = text_width as i64 - x_device;
+                let max_height = text_height as i64 - y_device;
+                width_device = width_device.min(max_width);
+                height_device = height_device.min(max_height);
+
+                if width_device <= 0 || height_device <= 0 {
+                    return;
+                }
+
+                let x0 = x_device as u32;
+                let y0 = y_device as u32;
+                w = width_device as u32;
+                h = height_device as u32;
+
                 // Precompute the 4-byte pixel once per rectangle and use row-wise fills
                 let mut packed_px = [0u8; 4];
                 match alpha_mode {

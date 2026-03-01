@@ -233,3 +233,39 @@ pub fn test_insert_newline_at_end_of_text() {
     assert_eq!(text_state.text(), "Hello\n\n");
     assert_eq!(text_state.cursor_char_index(), Some(6));
 }
+
+#[test]
+pub fn test_click_after_text_then_insert_keeps_caret_moving_forward() {
+    let mut ctx = TextContext::default();
+    let initial_text = "Hehe".to_string();
+
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
+    text_state.is_editable = true;
+    text_state.is_editing = true;
+    text_state.is_selectable = true;
+    text_state.are_actions_enabled = true;
+    text_state.recalculate(&mut ctx);
+
+    // Click in trailing empty space to place caret at the end.
+    text_state.handle_press(&mut ctx, Point::new(198.0, 10.0));
+    assert_eq!(text_state.cursor_char_index(), Some(4));
+    let caret_x_before_insert = text_state
+        .caret_position_relative()
+        .expect("Caret should be visible")
+        .x;
+
+    let result = text_state.apply_action(&mut ctx, &Action::InsertChar("x".into()));
+    assert!(matches!(result, ActionResult::TextChanged));
+    assert_eq!(text_state.text(), "Hehex");
+    assert_eq!(text_state.cursor_char_index(), Some(5));
+
+    let caret_x_after_insert = text_state
+        .caret_position_relative()
+        .expect("Caret should be visible")
+        .x;
+    assert!(
+        caret_x_after_insert > caret_x_before_insert,
+        "Caret should move to the right after inserting at end. before={caret_x_before_insert}, after={caret_x_after_insert}"
+    );
+}

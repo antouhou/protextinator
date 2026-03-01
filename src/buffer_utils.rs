@@ -27,7 +27,7 @@ pub(crate) fn vertical_offset(
     }
 }
 
-/// Ensures the caret is vertically visible by adjusting buffer scroll using DEVICE pixels.
+/// Ensures the caret is vertically visible by adjusting the buffer scroll using DEVICE pixels.
 /// Returns caret top-left in LOGICAL pixels relative to the viewport.
 pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
     buffer: &mut Buffer,
@@ -37,15 +37,21 @@ pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
     style: &TextStyle,
     scale_factor: f32,
 ) -> Option<Point> {
-    let mut editor = Editor::new(&mut *buffer);
-    editor.set_cursor(current_char_byte_cursor.cursor);
+    let mut caret_position =
+        cursor_position_with_trailing_space_fallback(&mut *buffer, current_char_byte_cursor);
 
-    let caret_position = editor.cursor_position();
+    if caret_position.is_none() {
+        let mut editor = Editor::new(&mut *buffer);
+        editor.set_cursor(current_char_byte_cursor.cursor);
+        editor.shape_as_needed(font_system, false);
+        caret_position =
+            cursor_position_with_trailing_space_fallback(&mut *buffer, current_char_byte_cursor);
+    }
 
     match caret_position {
         Some(position) => {
-            // caret position from cosmic_text is in DEVICE pixels
-            let mut caret_top_left_corner = Point::from(position);
+            // caret position is in DEVICE pixels
+            let mut caret_top_left_corner = position;
             let mut scroll = buffer.scroll();
             let scale = scale_factor.max(0.01);
             let line_height_device = style.line_height_pt() * scale;
@@ -68,38 +74,63 @@ pub(crate) fn adjust_vertical_scroll_to_make_caret_visible(
                 caret_top_left_corner.y / scale,
             ))
         }
-        None => {
-            // Caret is not visible, we need to shape the text and move the scroll
-            editor.shape_as_needed(font_system, false);
+        None => None,
+    }
+}
 
-            // TODO: Let's keep it the code below for a little while, it might be useful in the
-            //  future.
+pub(crate) fn cursor_position_with_trailing_space_fallback(
+    buffer: &mut Buffer,
+    current_char_byte_cursor: ByteCursor,
+) -> Option<Point> {
+    let cursor = current_char_byte_cursor.cursor;
+    let mut caret_position = {
+        let mut editor = Editor::new(&mut *buffer);
+        editor.set_cursor(cursor);
+        editor.cursor_position().map(Point::from)?
+    };
 
-            // If it's not visible, and the scroll is already at the top, that means that we're
-            //  at the end of the text, and we need to scroll to the bottom to avoid jumping to
-            //  the top of the text.
-            // if style.vertical_alignment == VerticalTextAlignment::End {
-            //     editor.with_buffer_mut(|buffer| {
-            //         let mut scroll = buffer.scroll();
-            //         if scroll.vertical == 0.0 && buffer_inner_dimensions.y < text_area_size.y {
-            //             let vertical_scroll_to_align_text = calculate_vertical_offset(
-            //                 style,
-            //                 text_area_size,
-            //                 buffer_inner_dimensions,
-            //             );
-            //             scroll.vertical = vertical_scroll_to_align_text;
-            //             buffer.set_scroll(scroll);
-            //         }
-            //     });
-            // }
-            // Return caret position in LOGICAL pixels
-            editor.cursor_position().map(|p| {
-                let p = Point::from(p);
-                let scale = scale_factor.max(0.01);
-                Point::new(p.x / scale, p.y / scale)
-            })
+    if let Some(run_line_width) = run_line_width_for_cursor_with_matching_vertical_position(
+        &*buffer,
+        cursor,
+        caret_position.y,
+    ) {
+        if run_line_width > caret_position.x {
+            caret_position.x = run_line_width;
         }
     }
+
+    Some(caret_position)
+}
+
+fn run_line_width_for_cursor_with_matching_vertical_position(
+    buffer: &Buffer,
+    cursor: Cursor,
+    cursor_y_position: f32,
+) -> Option<f32> {
+    for run in buffer.layout_runs() {
+        if run.line_i != cursor.line {
+            continue;
+        }
+
+        let cursor_is_at_line_end = cursor.index == run.text.len();
+        let line_has_trailing_whitespace = run
+            .text
+            .chars()
+            .last()
+            .map(|character| character.is_whitespace())
+            .unwrap_or(false);
+
+        if !cursor_is_at_line_end || !line_has_trailing_whitespace {
+            continue;
+        }
+
+        let same_visual_line = (run.line_top - cursor_y_position).abs() <= 1.0;
+        if same_visual_line {
+            return Some(run.line_w);
+        }
+    }
+
+    None
 }
 
 /// Hit-test a character under a LOGICAL pixel coordinate, accounting for scroll and scale.
