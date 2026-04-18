@@ -1155,6 +1155,7 @@ impl<T> TextState<T> {
         self.rasterized_texture.pixels.fill(0);
 
         let base_color = cosmic_text::Color::rgba(0, 0, 0, 0);
+        let requested_font_alpha = self.params.style().font_color.0.a();
         let text_width = width;
         let text_height = height;
         let horizontal_scroll_device = self.buffer.scroll().horizontal.round() as i64;
@@ -1214,25 +1215,30 @@ impl<T> TextState<T> {
 
                 // Precompute the 4-byte pixel once per rectangle and use row-wise fills
                 let mut packed_px = [0u8; 4];
+                // IMPORTANT: cosmic-text's mask glyph path replaces alpha with glyph coverage and does not
+                // apply the requested font alpha. Reapply the style alpha here so semi-transparent
+                // text survives rasterization.
+                let effective_alpha =
+                    ((u16::from(color.a()) * u16::from(requested_font_alpha) + 127) / 255) as u8;
                 match alpha_mode {
                     AlphaMode::Premultiplied => {
                         let r_lin = srgb_to_linear_u8(color.r());
                         let g_lin = srgb_to_linear_u8(color.g());
                         let b_lin = srgb_to_linear_u8(color.b());
-                        let a = color.a() as f32 / 255.0;
+                        let a = effective_alpha as f32 / 255.0;
                         let r_pma = r_lin * a;
                         let g_pma = g_lin * a;
                         let b_pma = b_lin * a;
                         packed_px[0] = linear_to_srgb_u8(r_pma);
                         packed_px[1] = linear_to_srgb_u8(g_pma);
                         packed_px[2] = linear_to_srgb_u8(b_pma);
-                        packed_px[3] = color.a();
+                        packed_px[3] = effective_alpha;
                     }
                     AlphaMode::Unmultiplied => {
                         packed_px[0] = color.r();
                         packed_px[1] = color.g();
                         packed_px[2] = color.b();
-                        packed_px[3] = color.a();
+                        packed_px[3] = effective_alpha;
                     }
                 }
 
