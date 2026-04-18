@@ -1,6 +1,6 @@
 [package]
 name = "protextinator"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 description = "Text management, made simple"
 keywords = ["text", "rendering", "gui", "graphics", "image"]
@@ -16,7 +16,7 @@ default = []
 serialization = ["dep:serde"]
 
 [dependencies]
-cosmic-text = "0.16.0"
+cosmic-text = "0.18.2"
 ahash = "0.8.12"
 smol_str = "0.3"
 serde = { version = "1.0.219", features = ["derive"], optional = true }
