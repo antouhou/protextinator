@@ -2,7 +2,7 @@ use crate::byte_cursor::ByteCursor;
 use crate::math::{Point, Rect, Size};
 use crate::style::{FontFamily, TextStyle, TextWrap, VerticalTextAlignment};
 use crate::text_params::TextParams;
-use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, FontSystem, Shaping};
+use cosmic_text::{Attrs, Buffer, Cursor, Edit, Editor, Ellipsize, FontSystem, Shaping};
 
 impl From<TextWrap> for cosmic_text::Wrap {
     fn from(value: TextWrap) -> Self {
@@ -200,6 +200,8 @@ pub(crate) fn update_buffer(
                 text_style.font_size.value() * scale_factor,
                 Some(text_area_size.x * scale_factor),
                 text_style.wrap.unwrap_or_default().into(),
+                // Do not add ellipses to the text rendering, let the user figure that out on their own
+                Ellipsize::None,
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
@@ -233,6 +235,8 @@ pub(crate) fn update_buffer(
                 text_style.font_size.value() * scale_factor,
                 Some(buffer_measurement.x),
                 wrap.into(),
+                // Do not add ellipses to the text rendering, let the user figure that out on their own
+                Ellipsize::None,
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
