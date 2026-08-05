@@ -1301,6 +1301,31 @@ impl<T> TextState<T> {
         ActionResult::TextCut(selected_text)
     }
 
+    fn cut_text_range(&mut self, ctx: &mut TextContext, start: usize, end: usize) -> ActionResult {
+        let (byte_start, byte_end) = {
+            let text = self.params.original_text();
+            let text_length = text.chars().count();
+            let start = start.min(text_length);
+            let end = end.min(text_length);
+            if start >= end {
+                return ActionResult::None;
+            }
+            let char_to_byte_offset = |char_index: usize| {
+                text.char_indices()
+                    .nth(char_index)
+                    .map(|(byte_offset, _)| byte_offset)
+                    .unwrap_or(text.len())
+            };
+            (char_to_byte_offset(start), char_to_byte_offset(end))
+        };
+        let cut_text = self.params.original_text()[byte_start..byte_end].to_owned();
+        self.remove_characters(byte_start, byte_end);
+        self.reset_selection();
+        self.update_cursor_before_glyph_with_bytes_offset(byte_start);
+        self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
+        ActionResult::TextCut(cut_text)
+    }
+
     fn delete_selected_text_or_text_before_cursor(
         &mut self,
         ctx: &mut TextContext,
@@ -1405,6 +1430,12 @@ impl<T> TextState<T> {
     pub fn apply_action(&mut self, ctx: &mut TextContext, action: &Action) -> ActionResult {
         if !self.are_actions_enabled {
             return ActionResult::ActionsDisabled;
+        }
+
+        if self.is_editable {
+            if let Action::CutRange { start, end } = action {
+                return self.cut_text_range(ctx, *start, *end);
+            }
         }
 
         if self.is_selectable {
