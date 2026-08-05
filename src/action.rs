@@ -15,6 +15,9 @@ pub enum Action {
     Paste(String),
     /// Cut selected text to the clipboard and remove it from the buffer.
     Cut,
+    /// Cut the characters in `start..end` (character indices, clamped to the text bounds)
+    /// and remove them from the buffer, placing the cursor at `start`.
+    CutRange { start: usize, end: usize },
     /// Copy selected text to the clipboard without removing it.
     CopySelectedText,
     /// Select all text in the buffer.
