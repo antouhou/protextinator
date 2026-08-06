@@ -201,3 +201,33 @@ pub fn test_copy_selection_from_middle() {
     // Verify the copy operation was successful and copied the correct text
     assert!(matches!(result, ActionResult::TextCopied(s) if s == "bro"));
 }
+
+// Select-all highlight must cover the last glyph: cosmic's highlight comparison only includes
+// a glyph's right edge for end cursors at or past (index = glyph.end, Affinity::Before).
+#[test]
+pub fn test_select_all_highlight_covers_entire_text() {
+    let mut ctx = TextContext::default();
+    let initial_text = "Hello World".to_string();
+
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
+    text_state.are_actions_enabled = true;
+    text_state.is_selectable = true;
+    text_state.recalculate(&mut ctx);
+
+    text_state.apply_action(&mut ctx, &Action::SelectAll);
+    text_state.recalculate(&mut ctx);
+
+    let text_width = text_state.inner_size().x;
+    let last_line_end = text_state
+        .selection()
+        .lines()
+        .iter()
+        .filter_map(|line| line.end_x_pt)
+        .fold(0.0_f32, f32::max);
+    assert!(
+        (last_line_end - text_width).abs() < 0.01,
+        "Select-all highlight should reach the end of the text: highlight end {last_line_end}, text width {text_width}"
+    );
+}

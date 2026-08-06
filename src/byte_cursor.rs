@@ -36,10 +36,14 @@ impl ByteCursor {
     }
 
     pub fn after_last_character(string: &str) -> Self {
-        let mut res = Self::before_last_character(string);
-        res.cursor.affinity = Affinity::After;
-        res.byte_character_start = string.len();
-        res
+        // The cosmic cursor must point past the last glyph, not at it: cosmic's highlight
+        // comparison includes a glyph's right edge only for cursors at or past
+        // (index = glyph.end, Affinity::Before).
+        Self {
+            cursor: char_byte_offset_to_cursor(string, string.len())
+                .expect("the string length is always a valid cursor position"),
+            byte_character_start: string.len(),
+        }
     }
 
     pub fn from_cursor(cursor: Cursor, string: &str) -> Option<ByteCursor> {
