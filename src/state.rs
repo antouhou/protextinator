@@ -1278,12 +1278,15 @@ impl<T> TextState<T> {
     }
 
     fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
-        if !text.is_empty() {
-            self.reset_selection_end();
+        if self.is_text_selected() {
+            self.move_cursor(ctx, Motion::Left);
+            self.remove_selected_text();
         }
-
-        self.params
-            .insert_str(self.cursor.byte_character_start, text);
+        if !text.is_empty() {
+            let insert_byte_offset = self.cursor.byte_character_start;
+            self.params.insert_str(insert_byte_offset, text);
+            self.update_cursor_before_glyph_with_bytes_offset(insert_byte_offset + text.len());
+        }
         self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
