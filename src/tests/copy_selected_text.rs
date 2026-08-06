@@ -231,3 +231,40 @@ pub fn test_select_all_highlight_covers_entire_text() {
         "Select-all highlight should reach the end of the text: highlight end {last_line_end}, text width {text_width}"
     );
 }
+
+// Pasting inserts at the cursor, replaces the active selection, and leaves the cursor
+// right after the pasted text.
+#[test]
+pub fn test_paste_replaces_selection_and_moves_cursor_to_pasted_end() {
+    let mut ctx = TextContext::default();
+    let initial_text = "Hello World".to_string();
+
+    let mut text_state = TextState::new_with_text(initial_text, &mut ctx.font_system, ());
+    text_state.set_style(&mono_style_test());
+    text_state.set_outer_size(&Point::from((200.0, 25.0)));
+    text_state.are_actions_enabled = true;
+    text_state.is_selectable = true;
+    text_state.is_editable = true;
+    text_state.recalculate(&mut ctx);
+
+    text_state.apply_action(&mut ctx, &Action::Paste("pasted".to_string()));
+    assert_eq!(text_state.text(), "pastedHello World");
+    assert_eq!(
+        text_state.cursor_char_index(),
+        Some("pasted".chars().count()),
+        "Cursor should be right after the pasted text"
+    );
+
+    text_state.apply_action(&mut ctx, &Action::SelectAll);
+    text_state.apply_action(&mut ctx, &Action::Paste("replaced".to_string()));
+    assert_eq!(
+        text_state.text(),
+        "replaced",
+        "Pasting with an active selection should replace the selection"
+    );
+    assert_eq!(
+        text_state.cursor_char_index(),
+        Some("replaced".chars().count()),
+        "Cursor should be right after the pasted text"
+    );
+}
