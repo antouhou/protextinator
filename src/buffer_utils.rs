@@ -164,14 +164,14 @@ pub(crate) fn update_buffer(
     let old_scroll = buffer.scroll();
 
     let scale_factor = params.scale_factor();
-    buffer.set_metrics(font_system, params.metrics());
-    buffer.set_wrap(font_system, wrap.into());
+    buffer.set_metrics(params.metrics());
+    buffer.set_wrap(wrap.into());
 
     // Setting vertical size to None means that the buffer will use the height of the text.
     // This is needed to ensue that glyphs can be scrolled vertically by smaller amounts than
     // the line height.
     // Apply scale for shaping to device pixels
-    buffer.set_size(font_system, Some(text_area_size.x * scale_factor), None);
+    buffer.set_size(Some(text_area_size.x * scale_factor), None);
 
     let mut attrs = Attrs::new()
         .color(font_color.into())
@@ -184,7 +184,6 @@ pub(crate) fn update_buffer(
     }
 
     buffer.set_text(
-        font_system,
         params.text_for_internal_use(),
         &attrs,
         Shaping::Advanced,
@@ -205,7 +204,7 @@ pub(crate) fn update_buffer(
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
-                cosmic_text::Hinting::Enabled,
+                cosmic_text::Hinting::Disabled,
             )
             .iter()
         {
@@ -240,7 +239,7 @@ pub(crate) fn update_buffer(
                 None,
                 // TODO: what is the default tab width? Make it configurable?
                 2,
-                cosmic_text::Hinting::Enabled,
+                cosmic_text::Hinting::Disabled,
             );
         }
     }

@@ -903,7 +903,7 @@ impl<T> TextState<T> {
 
         self.selection.lines.clear();
         for run in self.buffer.layout_runs() {
-            if let Some((start_x, width)) = run.highlight(start_cursor.cursor, end_cursor.cursor) {
+            for (start_x, width) in run.highlight(start_cursor.cursor, end_cursor.cursor) {
                 let scale = self.params.scale_factor().max(0.01);
                 self.selection.lines.push(SelectionLine {
                     // Convert to LOGICAL pixels
