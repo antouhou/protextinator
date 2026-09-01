@@ -18,23 +18,6 @@ impl ByteCursor {
         }
     }
 
-    pub fn before_last_character(string: &str) -> Self {
-        if string.is_empty() {
-            Self::string_start()
-        } else {
-            let last_byte_offset = string
-                .char_indices()
-                .last()
-                .map(|(byte_idx, _ch)| byte_idx)
-                .expect("string is not empty, so there must be at least one character");
-            Self {
-                cursor: char_byte_offset_to_cursor(string, last_byte_offset)
-                    .expect("the byte offset must be a valid cursor at this point"),
-                byte_character_start: last_byte_offset,
-            }
-        }
-    }
-
     pub fn after_last_character(string: &str) -> Self {
         // The cosmic cursor must point past the last glyph, not at it: cosmic's highlight
         // comparison includes a glyph's right edge only for cursors at or past
