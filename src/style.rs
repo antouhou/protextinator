@@ -1,7 +1,4 @@
-//! Text styling and formatting options.
-//!
-//! This module provides comprehensive text styling capabilities including fonts,
-//! colors, alignment, wrapping, and other visual properties for text rendering.
+//! Text styling: fonts, colors, alignment, and wrapping.
 
 use crate::font_family_query::FontFamilyQuery;
 use crate::utils::ArcCowStr;
@@ -23,10 +20,10 @@ pub enum TextWrap {
     BreakWord,
 }
 
-/// Represents the line height as a multiplier of the font size.
+/// Line height as a multiplier of the font size.
 ///
-/// A line height of 1.0 means the line height equals the font size.
-/// Values greater than 1.0 create more spacing between lines.
+/// 1.0 means the line height equals the font size. Values above 1.0 add spacing
+/// between lines.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LineHeight(pub f32);
@@ -67,12 +64,11 @@ impl From<f32> for LineHeight {
 
 impl Eq for LineHeight {}
 
-/// Represents a font size in points.
+/// Font size in points.
 ///
-/// Font size determines the height of characters in the text.
-/// Typical font sizes range from 8pt to 72pt, with 12pt-16pt being common for body text.
-/// This is a logical size - to apply scaling based on DPI, use [`crate::TextState::set_scale_factor`]
-/// for a specific state, or [`crate::TextManager::set_scale_factor`] to apply it to all states.
+/// The size is logical and does not change with DPI. Use [`crate::TextState::set_scale_factor`]
+/// for a specific state, or [`crate::TextManager::set_scale_factor`] for all states,
+/// to scale it with the display.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FontSize(pub f32);
@@ -109,10 +105,7 @@ impl FontSize {
 }
 
 impl Default for FontSize {
-    /// Returns a default font size of 1.5 points.
-    ///
-    /// Note: This is likely a placeholder value. Consider using a more standard
-    /// default like 12.0 or 16.0 points for typical text.
+    /// Returns 1.5 points. [`TextStyle::default`] does not use this; it sets 16.0 points.
     fn default() -> Self {
         Self(1.5)
     }
@@ -141,7 +134,7 @@ impl From<f32> for FontSize {
 
 impl Eq for FontSize {}
 
-/// Represents the spacing between characters
+/// Spacing between characters as a multiplier of the font size
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LetterSpacing(pub f32);
@@ -181,9 +174,7 @@ impl LetterSpacing {
     }
 }
 
-/// Wrapper around [`cosmic_text::Color`] for text color representation.
-///
-/// Provides convenient constructors for creating colors from RGB and RGBA values.
+/// Wrapper around [`cosmic_text::Color`] with constructors for RGB and RGBA values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FontColor(pub Color);
 
@@ -276,16 +267,14 @@ impl From<FontColor> for Color {
     }
 }
 
-/// Represents different font families available for text rendering.
-///
-/// Font families define the typeface used for rendering text. This can be
-/// either a specific named font or a generic family category.
+/// The typeface used for rendering text, either a specific named font or a
+/// generic family category.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FontFamily {
-    /// A specific named font family. Have to be loaded into the font system with
-    /// [`crate::TextManager::load_fonts`]. This can be a CSS-like font family query, i.e.
-    /// "Helvetica, 'Segoe UI', sans-serif", for example.
+    /// A specific named font family. Must be loaded into the font system with
+    /// [`crate::TextManager::load_fonts`]. Accepts a CSS-like font family query, e.g.
+    /// `"Helvetica, 'Segoe UI', sans-serif"`.
     Name(ArcCowStr),
     /// Generic sans-serif font family (e.g., Arial, Helvetica).
     SansSerif,
@@ -366,9 +355,7 @@ impl FontFamily {
         Self::Monospace
     }
 
-    /// Converts this font family to a [`cosmic_text::Family`] for use with the text engine.
-    ///
-    /// This is used internally by the text rendering system.
+    /// Converts this font family to a [`cosmic_text::Family`].
     pub fn to_fontdb_family(&self) -> Family<'_> {
         match self {
             FontFamily::Name(a) => Family::Name(a),
@@ -462,10 +449,10 @@ impl HorizontalTextAlignment {
 }
 
 impl From<HorizontalTextAlignment> for Option<Align> {
-    /// Converts a `TextAlignment` to a [`cosmic_text::Align`] option.
+    /// Converts to a [`cosmic_text::Align`] option.
     ///
-    /// Returns `None` for `Start` alignment (default behavior), and the corresponding
-    /// `Align` variant for other alignment types.
+    /// Returns `None` for `None` and `Start`, and the matching `Align` variant
+    /// for the other alignments.
     fn from(val: HorizontalTextAlignment) -> Self {
         match val {
             HorizontalTextAlignment::None => None,
@@ -494,10 +481,9 @@ pub enum VerticalTextAlignment {
     Center,
 }
 
-/// Comprehensive text styling configuration.
+/// Text styling configuration.
 ///
-/// `TextStyle` combines all visual aspects of text rendering, including font properties,
-/// colors, alignment, and wrapping behavior
+/// Combines font properties, color, alignment, and wrapping behavior.
 #[cfg_attr(feature = "serialization", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextStyle {
@@ -513,8 +499,8 @@ pub struct TextStyle {
     pub vertical_alignment: VerticalTextAlignment,
     /// Text wrapping behavior.
     pub wrap: Option<TextWrap>,
-    /// The font family to use for rendering. Can be a generic family created with an enum, or
-    /// you can use a CSS-like font family query string to specify custom fonts:
+    /// The font family to use for rendering. Either a generic family, or a CSS-like
+    /// font family query string for custom fonts, e.g.
     /// `"Helvetica, 'Segoe UI', sans-serif".into()`.
     pub font_family: FontFamily,
     /// The font weight to use for rendering.
@@ -535,15 +521,13 @@ impl Hash for TextStyle {
 }
 
 impl Default for TextStyle {
-    /// Creates a default text style with standard settings.
-    ///
-    /// Default values:
+    /// Creates a text style with these defaults:
     /// - Font size: 16.0 points
     /// - Line height: 1.5x font size
     /// - Font color: White (255, 255, 255)
     /// - No overflow handling
     /// - Start horizontal alignment
-    /// - Start vertical alignment  
+    /// - Start vertical alignment
     /// - No text wrapping
     /// - Sans-serif font family
     fn default() -> Self {
@@ -715,9 +699,6 @@ impl TextStyle {
     }
 
     /// Calculates the line height in points based on the font size and line height multiplier.
-    ///
-    /// # Returns
-    /// The line height in points (font_size * line_height_multiplier)
     ///
     /// # Examples
     /// ```

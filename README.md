@@ -6,7 +6,7 @@
 
 Protextinator is a text editing and rendering library for Rust, built on top of [cosmic_text](https://github.com/pop-os/cosmic-text). It provides a simpler API while adding features like vertical alignment, scroll position management, and text selection.
 
-**Note:** This library is still a work in progress. APIs may change.
+This library is still a work in progress. APIs may change.
 
 ## Features
 
@@ -17,7 +17,7 @@ Protextinator is a text editing and rendering library for Rust, built on top of 
 - Text state collection with optional usage tracking
 - Custom metadata for text states
 - Text selection and editing
-- Efficient text buffer caching
+- Text buffer caching
 - Word wrapping and text styling
 - Optional serialization support
 
@@ -27,17 +27,17 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-protextinator = "0.5.0"
+protextinator = "0.6"
 ```
 
 With serialization:
 
 ```toml
 [dependencies]
-protextinator = { version = "0.1.0", features = ["serialization"] }
+protextinator = { version = "0.6", features = ["serialization"] }
 ```
 
-## Quick Start
+## Quick start
 
 ```rust
 use protextinator::{TextManager, TextState, math::Size};
@@ -78,12 +78,12 @@ if let Some(state) = text_manager.text_states.get_mut(&id) {
     // Recalculate layout
     state.recalculate(&mut text_manager.text_context);
 
-    // Get the inner size of the buffer - i.e., how much space the text needs to occupy
+    // Get the inner size of the buffer, i.e. how much space the text occupies
     let inner_size = state.inner_size();
 }
 
 let mut remove_ids = vec![];
-// Optional: going to remove all states that were not accessed during the current frame
+// Optional: removes all states that were not accessed during the current frame
 text_manager.end_frame(&mut remove_ids);
 ```
 

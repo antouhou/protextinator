@@ -1,7 +1,6 @@
-//! Text state management and font system utilities.
+//! Text state management and font loading.
 //!
-//! This module provides high-level management of multiple text states, font loading,
-//! and resource tracking for text rendering systems.
+//! Manages multiple text states, their fonts, and usage tracking.
 
 use crate::font_family_query::FontFamilyCache;
 use crate::state::{AlphaMode, TextState};
@@ -12,12 +11,11 @@ use std::sync::Arc;
 
 /// Shared context for text rendering operations.
 ///
-/// Contains the font system, glyph cache, and usage tracking that can be shared
-/// across multiple text states for efficient resource utilization.
+/// Holds the font system, glyph cache, and usage tracking shared by all text states.
 pub struct TextContext {
     /// The cosmic-text font system for text layout and rendering.
     pub font_system: FontSystem,
-    /// Cache for rendered glyphs to improve performance.
+    /// Cache for rendered glyphs.
     pub swash_cache: SwashCache,
     /// Current device scale factor. 1.0 means logical pixels; >1.0 means HiDPI.
     pub scale_factor: f32,
@@ -40,11 +38,10 @@ impl Default for TextContext {
     }
 }
 
-/// High-level manager for multiple text states and shared resources.
+/// Manages multiple text states and the resources they share.
 ///
-/// `TextManager` provides a convenient API for managing multiple text buffers
-/// with shared font and rendering resources. It handles text state creation,
-/// font loading, and optional garbage collection of unused text states.
+/// Handles text state creation, font loading, and optional garbage collection
+/// of unused text states.
 ///
 /// # Type Parameters
 /// * `TMetadata` - Custom metadata type that can be attached to each text state
@@ -94,7 +91,7 @@ impl<TMetadata> TextManager<TMetadata> {
 
     /// Loads fonts from byte slices into the font system.
     ///
-    /// This is useful for embedding fonts directly in your application.
+    /// Use this to embed fonts in your application.
     ///
     /// # Arguments
     /// * `fonts` - Iterator of byte slices containing font data
@@ -134,11 +131,9 @@ impl<TMetadata> TextManager<TMetadata> {
         self.text_states.insert(id, state);
     }
 
-    /// Utility to do some simple garbage collection of text states if you don't want
-    /// to implement a usage tracker yourself. Call this at the start of each frame.
-    ///
-    /// This clears the usage tracker, preparing it to track which text states
-    /// are accessed during the current frame.
+    /// Call at the start of each frame to clear the usage tracker. Together with
+    /// [`Self::end_frame`], this gives you simple garbage collection of text states
+    /// if you don't want to implement usage tracking yourself.
     ///
     /// # Examples
     /// ```
@@ -153,12 +148,9 @@ impl<TMetadata> TextManager<TMetadata> {
         self.text_context.usage_tracker.clear();
     }
 
-    /// Utility to do some simple garbage collection of text states if you don't want
-    /// to implement a usage tracker yourself. Call this at the end of each frame, and this will
-    /// remove any text states not marked as accessed since the last call to `start_frame`.
-    /// Accepts a mutable vector to which it will append the IDs of removed text states.
-    ///
-    /// This helps prevent memory leaks when text states are no longer needed.
+    /// Call at the end of each frame to remove any text states not accessed since
+    /// the last [`Self::start_frame`] call. Appends the IDs of removed states to
+    /// `removed_ids`.
     ///
     /// # Examples
     /// ```
@@ -197,10 +189,9 @@ impl<TMetadata> TextManager<TMetadata> {
         }
     }
 
-    /// Rasterizes all text states into CPU-side RGBA textures and stores them in the states.
+    /// Rasterizes all text states into CPU-side RGBA textures stored on the states.
     ///
-    /// This will recalculate the shaping/layout if needed prior to rasterization.
-    /// Currently runs on a single thread; the API is designed to be easily parallelized later.
+    /// Recalculates shaping and layout first if needed. Runs on a single thread.
     pub fn rasterize_all_textures(&mut self, alpha_mode: AlphaMode) -> Vec<RasterizedTextureInfo> {
         // In the future this can be parallelized by splitting the states into chunks and
         // creating per-thread SwashCache/FontSystem references as needed.
@@ -267,10 +258,9 @@ impl TextContext {
     }
 }
 
-/// Tracks which text states have been accessed for garbage collection purposes.
+/// Tracks which text states have been accessed during the current frame.
 ///
-/// This is used by `TextManager` to automatically clean up unused text states
-/// and prevent memory leaks in applications with dynamic text content.
+/// [`TextManager`] uses this to drop text states that are no longer used.
 pub struct TextUsageTracker {
     accessed_states: HashSet<Id>,
 }
@@ -298,17 +288,12 @@ impl TextUsageTracker {
         self.accessed_states.insert(id);
     }
 
-    /// Clears all accessed state tracking.
-    ///
-    /// This should be called at the beginning of each frame to reset tracking.
+    /// Clears the set of accessed states. Call at the start of each frame.
     pub fn clear(&mut self) {
         self.accessed_states.clear();
     }
 
     /// Returns the set of text state IDs that have been accessed.
-    ///
-    /// # Returns
-    /// A reference to the set of accessed text state IDs
     pub fn accessed_states(&self) -> &HashSet<Id> {
         &self.accessed_states
     }

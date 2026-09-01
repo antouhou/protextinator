@@ -1,7 +1,4 @@
-//! Text state management and editing functionality.
-//!
-//! This module provides the core `TextState` type and related functionality for managing
-//! text content, cursor position, selection, scrolling, and text editing operations.
+//! The `TextState` type: text content, cursor, selection, scrolling, and editing.
 
 use crate::action::{Action, ActionResult};
 use crate::buffer_utils::{
@@ -32,10 +29,8 @@ pub struct RasterizedTexture {
     pub height: u32,
 }
 
-/// Represents a single line of text selection with visual boundaries.
-///
-/// Selection lines define the visual appearance of selected text, with start and end
-/// coordinates for rendering selection highlights.
+/// Start and end coordinates of a selection on a single line, for rendering
+/// selection highlights.
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SelectionLine {
     /// X coordinate where the selection starts on this line.
@@ -48,11 +43,10 @@ pub struct SelectionLine {
     pub end_y_pt: Option<f32>,
 }
 
-/// Represents the current text selection state.
+/// The current text selection.
 ///
-/// A selection is defined by an origin point (where selection started) and an end point
-/// (where selection currently ends). The selection can span multiple lines, with each
-/// line's visual boundaries stored in the `lines` vector.
+/// Defined by an origin (where the selection started) and an end cursor. A selection
+/// can span multiple lines; each line's bounds are stored in the `lines` vector.
 #[derive(Clone, Default, Debug)]
 pub struct Selection {
     origin_character_byte_cursor: Option<ByteCursor>,
@@ -63,7 +57,7 @@ pub struct Selection {
 impl Selection {
     /// Returns `true` if there is no active selection.
     ///
-    /// A selection is considered empty if either the origin or end cursor is not set.
+    /// A selection is empty if either the origin or the end cursor is not set.
     ///
     /// # Examples
     /// ```
@@ -78,33 +72,18 @@ impl Selection {
             || self.ends_before_character_byte_cursor.is_none()
     }
 
-    /// Returns the visual selection lines for rendering.
-    ///
-    /// Each line represents a portion of the selection with its visual boundaries.
-    ///
-    /// # Returns
-    /// A slice of `SelectionLine` objects representing the visual selection
+    /// Returns the selection bounds for each line, for rendering highlights.
     #[inline(always)]
     pub fn lines(&self) -> &[SelectionLine] {
         &self.lines
     }
 }
 
-/// The main text state container that manages text content, cursor, selection, and styling.
-///
-/// `TextState` is the core type for text editing functionality. It maintains the text buffer,
-/// cursor position, selection state, scroll position, and handles text editing operations.
+/// The core type for text editing: text buffer, cursor, selection, scroll position,
+/// and styling.
 ///
 /// # Type Parameters
 /// * `T` - Custom metadata type that can be attached to the text state
-///
-/// # Features
-/// - Text editing (insert, delete, copy, paste, cut)
-/// - Cursor movement and positioning
-/// - Text selection with visual feedback
-/// - Automatic scrolling to keep cursor visible
-/// - Rich text styling
-/// - Configurable editing behavior
 #[derive(Debug)]
 pub struct TextState<T> {
     params: TextParams,
@@ -130,14 +109,15 @@ pub struct TextState<T> {
     pub is_selectable: bool,
     /// Can text be edited?
     pub is_editable: bool,
-    /// Various actions, such as copy, paste, cut, etc., are going to be performed
+    /// Whether an editing session is in progress. Not read by the library itself;
+    /// it is for your own bookkeeping.
     pub is_editing: bool,
     /// Are actions enabled? If false, no actions will be performed.
     pub are_actions_enabled: bool,
     /// Interval between scroll updates when dragging the selection
     pub scroll_interval: Duration,
 
-    /// Doesn't affect anything - just some metadata that you can later use during rendering
+    /// Free-form metadata for your own use during rendering. The library ignores it.
     pub metadata: T,
 }
 
@@ -154,9 +134,6 @@ impl<T> TextState<T> {
     /// * `text` - The initial text content
     /// * `font_system` - Mutable reference to the font system for text layout
     /// * `metadata` - Custom metadata to associate with this text state
-    ///
-    /// # Returns
-    /// A new `TextState` instance
     ///
     /// # Examples
     /// ```
@@ -207,7 +184,7 @@ impl<T> TextState<T> {
         }
     }
 
-    /// Sets the caret width, which is the width of the cursor when editing text.
+    /// Sets the caret width in pixels.
     ///
     /// # Arguments
     /// * `width` - The caret width in pixels
@@ -225,10 +202,7 @@ impl<T> TextState<T> {
         self.caret_width = width;
     }
 
-    /// Returns the caret width, which is the width of the cursor when editing text.
-    ///
-    /// # Returns
-    /// The caret width in pixels
+    /// Returns the caret width in pixels.
     ///
     /// # Examples
     /// ```
@@ -245,9 +219,6 @@ impl<T> TextState<T> {
     /// Caret position relative to the buffer viewport with scroll applied. Returns `None` if
     /// the caret is not visible or the buffer is not shaped yet.
     ///
-    /// # Returns
-    /// The caret position relative to the viewport, or `None` if not visible
-    ///
     /// # Examples
     /// ```
     /// # use protextinator::TextState;
@@ -262,10 +233,7 @@ impl<T> TextState<T> {
         self.relative_caret_position
     }
 
-    /// Returns the position of the selection lines in the buffer viewport.
-    ///
-    /// # Returns
-    /// A reference to the current selection state
+    /// Returns the current selection.
     ///
     /// # Examples
     /// ```
@@ -284,8 +252,7 @@ impl<T> TextState<T> {
 
     /// Sets the text in the buffer and updates the cursor position if necessary.
     ///
-    /// This method only updates the text content without reshaping. You'll need to call
-    /// `recalculate` or `reshape_if_params_changed` separately to update the layout.
+    /// Does not reshape. Call [`Self::recalculate`] to update the layout.
     ///
     /// # Arguments
     /// * `text` - The new text content
@@ -315,9 +282,6 @@ impl<T> TextState<T> {
     }
 
     /// Returns the text in the buffer
-    ///
-    /// # Returns
-    /// The current text content as a string slice
     ///
     /// # Examples
     /// ```
@@ -351,9 +315,6 @@ impl<T> TextState<T> {
 
     /// Returns the text style
     ///
-    /// # Returns
-    /// A reference to the current text style
-    ///
     /// # Examples
     /// ```
     /// # use protextinator::TextState;
@@ -367,12 +328,9 @@ impl<T> TextState<T> {
         self.params.style()
     }
 
-    /// Returns the resolved font family after font matching has been performed.
+    /// Returns the resolved font family after font matching.
     ///
-    /// This may differ from the font family in the style if font substitution occurred.
-    ///
-    /// # Returns
-    /// A reference to the resolved font family
+    /// May differ from the style's font family if font substitution occurred.
     ///
     /// # Examples
     /// ```
@@ -386,8 +344,8 @@ impl<T> TextState<T> {
         &self.resolved_font_family
     }
 
-    /// Sets the visible area of the text buffer. This is going to be used to determine the buffer's
-    /// viewport size and how much text is visible.
+    /// Sets the visible area of the text buffer, i.e. the viewport size. It determines
+    /// how much text is visible.
     ///
     /// # Arguments
     /// * `size` - The new visible area size
@@ -404,10 +362,7 @@ impl<T> TextState<T> {
         self.params.set_size(size)
     }
 
-    /// Metadata set to a cosmic_text's buffer
-    ///
-    /// # Returns
-    /// The current buffer metadata value
+    /// Returns the metadata set on the cosmic_text buffer
     ///
     /// # Examples
     /// ```
@@ -421,8 +376,8 @@ impl<T> TextState<T> {
         self.params.metadata()
     }
 
-    /// Sets the metadata for the text cosmic_text's buffer. Note that this is different from
-    /// the `metadata` field in `TextState`, which is a custom type.
+    /// Sets the metadata on the cosmic_text buffer. This is different from the `metadata`
+    /// field on `TextState`, which holds your custom type.
     ///
     /// # Arguments
     /// * `metadata` - The metadata value to set
@@ -441,12 +396,8 @@ impl<T> TextState<T> {
         self.params.set_metadata(metadata)
     }
 
-    /// Returns the visible area size of the text buffer. Note that this is set directly by the
-    /// `set_outer_size` method, and it does not represent the actual text dimensions. To get the
-    /// inner dimensions of the text buffer, use `inner_size`.
-    ///
-    /// # Returns
-    /// The outer size (visible area) of the text buffer
+    /// Returns the visible area size of the text buffer, as set by [`Self::set_outer_size`].
+    /// This is not the actual text size; use [`Self::inner_size`] for that.
     ///
     /// # Examples
     /// ```
@@ -461,11 +412,8 @@ impl<T> TextState<T> {
         self.params.size()
     }
 
-    /// Returns the inner dimensions of the text buffer. This represents the actual size of the text
-    /// content, which may differ from the outer size if the text is larger than the visible area.
-    ///
-    /// # Returns
-    /// The inner dimensions representing the actual text content size
+    /// Returns the actual size of the text content. May differ from [`Self::outer_size`]
+    /// if the text is larger than the visible area.
     ///
     /// # Examples
     /// ```
@@ -480,10 +428,7 @@ impl<T> TextState<T> {
         self.inner_dimensions
     }
 
-    /// Returns the text buffer that can be used for rendering
-    ///
-    /// # Returns
-    /// A reference to the underlying cosmic-text Buffer
+    /// Returns the underlying cosmic-text [`Buffer`], for rendering
     ///
     /// # Examples
     /// ```
@@ -503,11 +448,7 @@ impl<T> TextState<T> {
         &self.rasterized_texture
     }
 
-    /// Returns the length of the text in characters. Note that this is different from the
-    /// string .len(), which returns the length in bytes.
-    ///
-    /// # Returns
-    /// The number of Unicode characters in the text
+    /// Returns the length of the text in characters, unlike `str::len` which counts bytes.
     ///
     /// # Examples
     /// ```
@@ -521,11 +462,8 @@ impl<T> TextState<T> {
         self.params.original_text().chars().count()
     }
 
-    /// Returns the char index of the cursor in the text buffer. Note that this returns the
-    /// char index, not the char byte index.
-    ///
-    /// # Returns
-    /// The character index of the cursor, or `None` if the cursor position is invalid
+    /// Returns the character index of the cursor in the text. This is a character index,
+    /// not a byte index.
     ///
     /// # Examples
     /// ```
@@ -660,10 +598,7 @@ impl<T> TextState<T> {
         }
     }
 
-    /// Checks if there is a text selection that is not empty.
-    ///
-    /// # Returns
-    /// `true` if text is currently selected, `false` otherwise
+    /// Returns `true` if any text is selected.
     ///
     /// # Examples
     /// ```
@@ -693,9 +628,6 @@ impl<T> TextState<T> {
     }
 
     /// Clears the current text selection.
-    ///
-    /// This removes any active text selection, returning the text state to having
-    /// only a cursor position without any selected text.
     ///
     /// # Examples
     /// ```
@@ -728,12 +660,10 @@ impl<T> TextState<T> {
         &self.params.original_text()[start..end]
     }
 
-    /// Returns the selected text as a substring based on the selection start and end byte offsets.
-    /// You also can get the selected text by using [`TextState::apply_action`] with
-    /// [`Action::CopySelectedText`].
+    /// Returns the selected text, or `None` if nothing is selected.
     ///
-    /// # Returns
-    /// The currently selected text, or `None` if no text is selected
+    /// To copy the selection to the clipboard instead, use [`TextState::apply_action`]
+    /// with [`Action::CopySelectedText`].
     ///
     /// # Examples
     /// ```
@@ -759,19 +689,11 @@ impl<T> TextState<T> {
         }
     }
 
-    //
-    /// Gets the current absolute scroll position of the text buffer. Note that
-    /// the buffer must be shaped and updated before calling this function, i.e. if anything
-    /// changed in the text, you should call [`TextState::recalculate`].
+    /// Returns the absolute scroll offset of the text content, both horizontal
+    /// and vertical.
     ///
-    /// The scroll position represents how much the text content has been scrolled
-    /// from its original position. This accounts for both horizontal and vertical scrolling.
-    ///
-    /// # Returns
-    /// A `Point` representing the absolute scroll offset
-    ///
-    /// # Note
-    /// The buffer must be shaped and updated before calling this function for accurate results.
+    /// Call [`TextState::recalculate`] first if the text changed, otherwise the
+    /// result may be stale.
     ///
     /// # Examples
     /// ```
@@ -809,14 +731,11 @@ impl<T> TextState<T> {
         }
     }
 
-    /// Sets the absolute scroll position of the text buffer. Note that text that has fixed
-    /// alignment (e.g. `VerticalTextAlignment::Top`) will not be affected by this method,
-    /// and the scroll position will be calculated based on the current text layout and line
-    /// heights. For the scroll to take effect, alignment must be set to
-    /// `VerticalTextAlignment::None`.
+    /// Sets the absolute scroll position of the text buffer.
     ///
-    /// This allows you to programmatically scroll the text content to a specific position.
-    /// The scroll position is calculated based on line heights and text layout.
+    /// Scroll only takes effect when vertical alignment is `VerticalTextAlignment::None`.
+    /// With a fixed alignment (e.g. `VerticalTextAlignment::Top`), the offset comes from
+    /// the layout and this method has no visible effect.
     ///
     /// # Arguments
     /// * `scroll` - The absolute scroll position to set
@@ -933,10 +852,9 @@ impl<T> TextState<T> {
     }
 
     /// Recalculates and reshapes the text buffer, scroll, caret position, and selection area.
-    /// The results are cached, so don't be afraid to call this function multiple times.
+    /// Results are cached, so calling it repeatedly is cheap.
     ///
-    /// This is the main method to call after making changes to text content, style, or size
-    /// to ensure the visual representation is updated correctly.
+    /// Call this after changing text content, style, or size.
     ///
     /// # Arguments
     /// * `ctx` - Mutable reference to the text context for processing
@@ -1085,10 +1003,8 @@ impl<T> TextState<T> {
         None
     }
 
-    /// Reshapes the text buffer if parameters have changed since the last reshape.
-    ///
-    /// This method checks if any text parameters (content, style, size) have changed
-    /// and only performs the expensive reshape operation if necessary.
+    /// Reshapes the text buffer, but only if the text, style, or size changed since
+    /// the last reshape. Reshaping is expensive, so it is skipped when nothing changed.
     fn reshape_if_params_changed(&mut self, ctx: &mut TextContext) {
         let font_query_changed = self.params.font_query_changed_since_last_shape();
         if font_query_changed {
@@ -1116,8 +1032,8 @@ impl<T> TextState<T> {
 
     /// Rasterizes the current text buffer into an RGBA8 CPU texture using device-pixel dimensions.
     ///
-    /// Returns true if rasterization was performed (and texture updated), false if skipped
-    /// (e.g., zero-sized target).
+    /// Returns `true` if the texture was updated, `false` if rasterization was skipped
+    /// (e.g. zero-sized target).
     pub(crate) fn rasterize_into_texture(
         &mut self,
         ctx: &mut TextContext,
@@ -1403,16 +1319,12 @@ impl<T> TextState<T> {
 
     /// Applies a text editing action and returns the result.
     ///
-    /// This is the main method for processing text editing operations like inserting text,
-    /// moving the cursor, copying/pasting, etc. The method respects the current text state
-    /// configuration (editable, selectable, actions enabled).
+    /// Respects the state's `is_editable`, `is_selectable`, and `are_actions_enabled`
+    /// flags.
     ///
     /// # Arguments
     /// * `ctx` - Mutable reference to the text context for processing
     /// * `action` - The action to apply
-    ///
-    /// # Returns
-    /// An `ActionResult` indicating what happened as a result of the action
     ///
     /// # Examples
     /// ```
@@ -1473,18 +1385,12 @@ impl<T> TextState<T> {
     }
 
     // TODO: make it an action
-    /// Handles a mouse press event on the text area.
-    ///
-    /// This method processes mouse clicks for cursor positioning and selection start.
-    /// It converts the click position to a character position in the text and updates
-    /// the cursor accordingly.
+    /// Handles a mouse press on the text area: positions the cursor at the clicked
+    /// character and starts a new selection there.
     ///
     /// # Arguments
     /// * `text_context` - Mutable reference to the text context
     /// * `click_position_relative_to_area` - The click position relative to the text area
-    ///
-    /// # Returns
-    /// `Some(())` if the press was handled, `None` otherwise
     ///
     /// # Examples
     /// ```
@@ -1522,18 +1428,13 @@ impl<T> TextState<T> {
         None
     }
 
-    /// Handles mouse drag events for text selection.
-    ///
-    /// This method processes mouse drag operations to create and update text selections.
-    /// It includes automatic scrolling when dragging beyond the visible text area.
+    /// Handles mouse drags to create and update the text selection. Scrolls
+    /// automatically when the pointer moves beyond the visible text area.
     ///
     /// # Arguments
     /// * `ctx` - Mutable reference to the text context
     /// * `is_dragging` - Whether a drag operation is currently in progress
     /// * `pointer_relative_position` - The current pointer position relative to the text area
-    ///
-    /// # Returns
-    /// `Some(())` if the drag was handled, `None` otherwise
     ///
     /// # Examples
     /// ```
@@ -1597,19 +1498,13 @@ impl<T> TextState<T> {
     }
 }
 
-/// Takes element height, text buffer height, and vertical alignment and returns the vertical offset
-/// needed to align the text vertically.
-///
-/// This function calculates the appropriate vertical offset for text alignment based on
-/// the text area size, buffer dimensions, and vertical alignment settings.
+/// Returns the vertical offset that aligns the text within the text area, based on
+/// the text area size, buffer dimensions, and vertical alignment.
 ///
 /// # Arguments
 /// * `text_style` - The text style containing alignment information
 /// * `text_area_size` - The size of the text area container
 /// * `buffer_inner_dimensions` - The actual dimensions of the text content
-///
-/// # Returns
-/// The vertical offset needed to achieve the desired alignment
 pub(crate) fn calculate_vertical_offset(
     text_style: &TextStyle,
     text_area_size: Size,
@@ -1627,11 +1522,8 @@ pub(crate) fn calculate_vertical_offset(
     0.0 - vertical_offset
 }
 
-/// Describes the reason for a text state update operation.
-///
-/// This enum is used internally to optimize recalculation operations by providing
-/// context about what type of change triggered the update, allowing for more
-/// targeted and efficient updates.
+/// The reason for a text state update. Used internally to skip unnecessary work
+/// during recalculation.
 pub enum UpdateReason {
     /// Text content was inserted at the cursor position.
     InsertedText,
@@ -1666,9 +1558,9 @@ impl UpdateReason {
         matches!(self, UpdateReason::DeletedTextAtCursor)
     }
 
-    /// Returns `true` if this update reason indicates any cursor-related change.
+    /// Returns `true` if this update reason involves the cursor.
     ///
-    /// This includes cursor movement, text insertion, and text deletion operations.
+    /// Covers cursor movement, text insertion, and text deletion.
     pub fn is_cursor_updated(&self) -> bool {
         matches!(
             self,
@@ -1681,10 +1573,10 @@ impl UpdateReason {
 
 #[derive(Debug, Copy, Clone)]
 pub enum AlphaMode {
-    /// Use premultiplied alpha for rendering. This is generally preferred for performance
-    /// and quality, especially when blending with other premultiplied content.
+    /// Use premultiplied alpha for rendering. Preferred when blending with other
+    /// premultiplied content.
     Premultiplied,
-    /// Use unmultiplied alpha for rendering. This may be necessary when compositing
-    /// with non-premultiplied content, but can lead to artifacts and is less efficient.
+    /// Use unmultiplied alpha for rendering. Needed when compositing with
+    /// non-premultiplied content, but can produce artifacts and is less efficient.
     Unmultiplied,
 }

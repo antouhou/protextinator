@@ -1,14 +1,8 @@
-//! Mathematical primitives for 2D graphics and text layout.
-//!
-//! This module provides fundamental geometric types used throughout the text system,
-//! including points, rectangles, and size representations.
+//! Geometric types for 2D text layout: points, rectangles, sizes.
 
 use std::ops::Sub;
 
 /// A 2D rectangle defined by minimum and maximum points.
-///
-/// Rectangles are used to define text areas, selection bounds, and other
-/// rectangular regions in the text layout system.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Rect {
     /// The minimum (top-left) corner of the rectangle.
@@ -95,11 +89,9 @@ impl From<((f32, f32), (f32, f32))> for Rect {
     }
 }
 
-/// A 2D point representing a position in 2D space.
+/// A 2D position.
 ///
-/// Points are used for positions, sizes, offsets, and other 2D coordinate
-/// representations throughout the text system. The coordinate system typically
-/// has the origin (0,0) at the top-left, with positive X going right and
+/// The origin (0, 0) is the top-left corner, with positive X going right and
 /// positive Y going down.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Point {
@@ -147,7 +139,7 @@ impl Point {
 
     /// Checks if this point is approximately equal to another point within a given epsilon.
     ///
-    /// This is useful for floating-point comparisons where exact equality may not be reliable.
+    /// Use this instead of `==` when comparing computed coordinates.
     ///
     /// # Arguments
     /// * `other` - The other point to compare against
@@ -172,8 +164,7 @@ impl Point {
 impl Sub for Point {
     type Output = Point;
 
-    /// Subtracts two points, resulting in a new point that represents the vector
-    /// from the second point to the first.
+    /// Subtracts two points, returning the vector from the second point to the first.
     ///
     /// # Examples
     /// ```
@@ -193,10 +184,8 @@ impl Sub for Point {
     }
 }
 
-/// Type alias for [`Point`] when used to represent dimensions (width, height).
-///
-/// While functionally identical to `Point`, this type alias provides semantic clarity
-/// when a point is being used to represent a size rather than a position.
+/// Alias for [`Point`] used where a value means dimensions (width, height) rather
+/// than a position.
 pub type Size = Point;
 
 impl From<(f32, f32)> for Point {

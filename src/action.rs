@@ -1,14 +1,10 @@
 //! Text editing actions and their results.
-//!
-//! This module defines the various actions that can be performed on text (like inserting,
-//! deleting, copying, etc.) and the results of those actions.
 
 use smol_str::SmolStr;
 
-/// Represents the different text editing actions that can be performed.
+/// A text editing operation: insertion, deletion, cursor movement, or clipboard access.
 ///
-/// Actions encapsulate text editing operations like insertion, deletion, cursor movement,
-/// and clipboard operations. They are processed by the text state to modify the text buffer.
+/// The text state applies the action to its buffer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     /// Paste text from the clipboard at the current cursor position.
@@ -36,11 +32,10 @@ pub enum Action {
     InsertChar(SmolStr),
 }
 
-/// The result of applying an action to a text state.
+/// The result of applying an [`Action`] to a text state.
 ///
-/// Action results indicate what happened when an action was processed,
-/// allowing the application to respond appropriately (e.g., updating the UI,
-/// accessing the clipboard, etc.).
+/// Tells the application what happened, e.g. whether the text changed or the
+/// clipboard needs updating.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ActionResult {
     /// No action was performed or no change occurred.
@@ -58,9 +53,7 @@ pub enum ActionResult {
 }
 
 impl ActionResult {
-    /// Returns `true` if the result is `None` (no action was performed).
-    ///
-    /// This is useful for checking if an action had any effect.
+    /// Returns `true` if no action was performed.
     ///
     /// # Examples
     /// ```
