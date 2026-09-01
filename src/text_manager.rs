@@ -9,6 +9,15 @@ use ahash::{HashMap, HashSet, HashSetExt};
 use cosmic_text::{fontdb, FontSystem, SwashCache};
 use std::sync::Arc;
 
+fn create_system_font_system() -> FontSystem {
+    let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
+    let mut font_database = fontdb::Database::new();
+    font_database.load_system_fonts();
+
+    // FontSystem::new replaces generic families after loading the database.
+    FontSystem::new_with_locale_and_db(locale, font_database)
+}
+
 /// Shared context for text rendering operations.
 ///
 /// Holds the font system, glyph cache, and usage tracking shared by all text states.
@@ -29,7 +38,7 @@ impl Default for TextContext {
     /// Creates a default text context with initialized font system and caches.
     fn default() -> Self {
         Self {
-            font_system: FontSystem::new(),
+            font_system: create_system_font_system(),
             swash_cache: SwashCache::new(),
             scale_factor: 1.0,
             usage_tracker: TextUsageTracker::new(),

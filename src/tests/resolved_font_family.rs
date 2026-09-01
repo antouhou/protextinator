@@ -4,7 +4,32 @@ use crate::style::{
 };
 use crate::tests::mono_style_test;
 use crate::{Point, TextContext, TextState};
-use cosmic_text::Color;
+use cosmic_text::{fontdb, Color};
+
+#[test]
+fn default_text_context_preserves_a_valid_system_sans_serif_family() {
+    let mut system_font_database = fontdb::Database::new();
+    system_font_database.load_system_fonts();
+    let system_sans_serif_family = system_font_database
+        .family_name(&fontdb::Family::SansSerif)
+        .to_owned();
+    let ctx = TextContext::default();
+
+    assert_eq!(
+        ctx.font_system.db().family_name(&fontdb::Family::SansSerif),
+        system_sans_serif_family
+    );
+
+    let resolved_face = ctx.font_system.db().query(&fontdb::Query {
+        families: &[fontdb::Family::SansSerif],
+        ..Default::default()
+    });
+
+    assert!(
+        resolved_face.is_some(),
+        "the default sans-serif family must resolve to an installed font"
+    );
+}
 
 #[test]
 fn test_resolved_font_family_changes_to_monospace() {
