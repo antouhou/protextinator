@@ -110,7 +110,7 @@ impl<'a> App<'a> {
             let background = Shape::rect(
                 [(0.0, 0.0), (900.0, 700.0)],
                 Color::rgb(30, 34, 42), // Dark background
-                Stroke::new(0.0, Color::TRANSPARENT),
+                Stroke::new(0.0_f32, Color::TRANSPARENT),
             );
             renderer.add_shape(background, None, (0.0, 0.0), None);
 
@@ -118,7 +118,7 @@ impl<'a> App<'a> {
             let text_bg = Shape::rect(
                 [(40.0, 40.0), (860.0, 650.0)],
                 Color::rgb(40, 44, 52), // Slightly lighter background
-                Stroke::new(2.0, Color::rgb(97, 175, 239)),
+                Stroke::new(2.0_f32, Color::rgb(97, 175, 239)),
             );
             renderer.add_shape(text_bg, None, (0.0, 0.0), None);
 
@@ -166,7 +166,7 @@ impl<'a> App<'a> {
                     (cursor_x + 2.0, cursor_y + text_style.font_size.0),
                 ],
                 Color::rgb(97, 175, 239), // Blue cursor
-                Stroke::new(0.0, Color::TRANSPARENT),
+                Stroke::new(0.0_f32, Color::TRANSPARENT),
             );
             renderer.add_shape(cursor, None, (0.0, 0.0), None);
 
@@ -277,7 +277,7 @@ impl<'a> App<'a> {
                         Shape::rect(
                             [(0.0, 0.0), (text_area_size.width, text_area_size.height)],
                             Color::TRANSPARENT,
-                            Stroke::new(0.0, Color::TRANSPARENT),
+                            Stroke::new(0.0_f32, Color::TRANSPARENT),
                         ),
                         None,
                         (text_rect.min.x, text_rect.min.y),

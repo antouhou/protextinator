@@ -1,16 +1,14 @@
 //! # Protextinator
 //!
-//! Text editing and rendering library built on top of [`cosmic_text`], that provides a simpler
-//! API with additional features, such as:
+//! Text editing and rendering library built on top of [`cosmic_text`]. It provides a simpler
+//! API with additional features:
 //!
 //! - Vertical text alignment
 //! - Measuring text buffer size
 //! - Managing scroll position with absolute coordinates
 //! - A simple interface for loading and managing fonts
-//! - A collection of text states that has optional track of usage for garbage collection
+//! - A collection of text states with optional usage tracking for garbage collection
 //! - Custom metadata for text states
-//!   
-//! and more.
 //!
 //! ## Basic Usage
 //!
@@ -53,12 +51,12 @@
 //!     // Recalculate layout
 //!     state.recalculate(&mut text_manager.text_context);
 //!
-//!     // Get the inner size of the buffer - i.e., how much space the text needs to occupy
+//!     // Get the inner size of the buffer, i.e. how much space the text occupies
 //!     let inner_size = state.inner_size();
 //! }
 //!
 //! let mut remove_ids = vec![];
-//! // Optional: going to remove all states that were not accessed during the current frame
+//! // Optional: removes all states that were not accessed during the current frame
 //! text_manager.end_frame(&mut remove_ids);
 //! ```
 

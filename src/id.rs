@@ -1,16 +1,11 @@
-//! Unique identifier type for text states and other resources.
-//!
-//! This module provides a hash-based ID system for efficiently identifying
-//! and tracking text states and other resources in the system.
+//! Hash-based identifiers for text states.
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-/// A unique identifier based on hash values.
+/// A unique identifier created by hashing any hashable value.
 ///
-/// `Id` provides a way to create stable, unique identifiers from any hashable data.
-/// This is particularly useful for identifying text states, UI elements, and other
-/// resources that need consistent identification across frames.
+/// Useful for identifying text states that need a stable ID across frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Id(pub u64);
 
@@ -29,8 +24,7 @@ impl Id {
 
     /// Creates a new ID by hashing the provided value.
     ///
-    /// The same input will always produce the same ID, making this suitable
-    /// for stable identification across application runs.
+    /// The same input always produces the same ID, even across application runs.
     ///
     /// # Arguments
     /// * `id` - Any hashable value to create an ID from
@@ -55,7 +49,7 @@ impl Id {
 
     /// Creates a new ID by combining this ID with another hashable value.
     ///
-    /// This is useful for creating hierarchical or composite IDs.
+    /// Use this to build hierarchical IDs, like a window ID plus a widget name.
     ///
     /// # Arguments
     /// * `id` - Any hashable value to combine with this ID

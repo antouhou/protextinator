@@ -1,30 +1,24 @@
-//! Utility types and functions for the text system.
-//!
-//! This module contains helper types and utilities used throughout the crate,
-//! including string handling optimizations.
+//! Helper types and functions used throughout the crate.
 
 #[cfg(feature = "serialization")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
 use std::{ops::Deref, sync::Arc};
 
-/// An efficient string type that can hold either borrowed static strings or owned arc strings.
+/// A string type that holds either a borrowed static string or an Arc-owned string.
 ///
-/// This type is optimized for cases where strings are frequently either static string literals
-/// or shared owned strings. It avoids unnecessary allocations when dealing with static strings
-/// while providing reference counting for owned strings.
+/// Borrowed strings cost no allocation; owned strings are reference-counted,
+/// so clones are cheap.
 #[derive(Clone, Debug)]
 pub enum ArcCowStr {
     /// A borrowed static string slice with 'static lifetime.
     Borrowed(&'static str),
-    /// An owned string wrapped in an Arc for efficient cloning.
+    /// An owned string wrapped in an Arc for cheap clones.
     Owned(Arc<str>),
 }
 
 impl From<&'static str> for ArcCowStr {
-    /// Creates an `ArcCowStr` from a static string slice.
-    ///
-    /// This is the most efficient way to create an `ArcCowStr` from string literals.
+    /// Creates an `ArcCowStr` from a static string slice without allocating.
     ///
     /// # Examples
     /// ```
@@ -41,7 +35,7 @@ impl From<&'static str> for ArcCowStr {
 impl From<String> for ArcCowStr {
     /// Creates an `ArcCowStr` from an owned String.
     ///
-    /// The String is converted to an Arc<str> for efficient sharing.
+    /// Converts the `String` to an `Arc<str>` for cheap clones.
     ///
     /// # Examples
     /// ```
@@ -59,9 +53,8 @@ impl From<String> for ArcCowStr {
 impl Deref for ArcCowStr {
     type Target = str;
 
-    /// Dereferences to the underlying string slice.
-    ///
-    /// This allows `ArcCowStr` to be used wherever a `&str` is expected.
+    /// Dereferences to the string slice, so `ArcCowStr` works wherever a `&str`
+    /// is expected.
     fn deref(&self) -> &str {
         match self {
             ArcCowStr::Borrowed(s) => s,

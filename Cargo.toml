@@ -1,6 +1,6 @@
 [package]
 name = "protextinator"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2021"
 description = "Text management, made simple"
 keywords = ["text", "rendering", "gui", "graphics", "image"]
@@ -20,6 +20,7 @@ cosmic-text = "0.19.0"
 ahash = "0.8.12"
 smol_str = "0.3"
 serde = { version = "1.0.219", features = ["derive"], optional = true }
+sys-locale = "0.3"
 
 [dev-dependencies]
 grafo = "0.9"

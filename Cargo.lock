@@ -1688,7 +1688,7 @@ checksum = "afbdc74edc00b6f6a218ca6a5364d6226a259d4b8ea1af4a0ea063f27e179f4d"
 
 [[package]]
 name = "protextinator"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "ahash",
  "cosmic-text 0.19.0",
@@ -1698,6 +1698,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smol_str 0.3.2",
+ "sys-locale",
  "winit",
 ]
 
