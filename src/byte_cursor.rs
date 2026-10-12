@@ -58,9 +58,6 @@ impl ByteCursor {
     }
 
     pub fn update_byte_offset(&mut self, byte_offset: usize, string: &str) -> bool {
-        if self.byte_character_start == byte_offset {
-            return true;
-        }
         if let Some(cursor) = char_byte_offset_to_cursor(string, byte_offset) {
             self.cursor = cursor;
             self.byte_character_start = byte_offset;
