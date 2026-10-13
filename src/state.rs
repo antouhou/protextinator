@@ -276,10 +276,12 @@ impl<T> TextState<T> {
         self.relative_caret_position = None;
 
         let mut byte_offset = self.cursor.byte_character_start.min(text.len());
-        while !text.is_char_boundary(byte_offset) {
+        while !self
+            .cursor
+            .update_byte_offset(byte_offset, self.params.text_for_internal_use())
+        {
             byte_offset -= 1;
         }
-        self.update_cursor_before_glyph_with_bytes_offset(byte_offset);
     }
 
     /// Returns the text in the buffer

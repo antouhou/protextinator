@@ -139,6 +139,47 @@ fn replacement_preserves_a_valid_cursor_byte_offset() {
 }
 
 #[test]
+fn replacement_with_crlf_and_multibyte_text_allows_successive_insertions() {
+    let mut ctx = TextContext::default();
+    let mut state = editable_state("ab\nd", &mut ctx);
+    for _ in 0..3 {
+        state.apply_action(&mut ctx, &Action::MoveCursorRight);
+    }
+    assert_eq!(state.cursor_char_index(), Some(3));
+
+    state.set_text("a\r\n\u{e9}");
+    state.recalculate(&mut ctx);
+
+    assert_eq!(
+        state.apply_action(&mut ctx, &Action::InsertChar("x".into())),
+        ActionResult::TextChanged
+    );
+    assert_eq!(
+        state.apply_action(&mut ctx, &Action::InsertChar("y".into())),
+        ActionResult::TextChanged
+    );
+    assert_eq!(state.text(), "a\r\nxy\u{e9}");
+    assert_eq!(state.cursor_char_index(), Some(5));
+}
+
+#[test]
+fn replacement_clamps_cursor_before_a_crlf_ending() {
+    let mut ctx = TextContext::default();
+    let mut state = editable_state("abcd", &mut ctx);
+    state.apply_action(&mut ctx, &Action::MoveCursorRight);
+    state.apply_action(&mut ctx, &Action::MoveCursorRight);
+
+    state.set_text("a\r\n\u{e9}");
+    state.recalculate(&mut ctx);
+
+    assert_eq!(state.cursor_char_index(), Some(1));
+    state.apply_action(&mut ctx, &Action::InsertChar("x".into()));
+    state.apply_action(&mut ctx, &Action::InsertChar("y".into()));
+    assert_eq!(state.text(), "axy\r\n\u{e9}");
+    assert_eq!(state.cursor_char_index(), Some(3));
+}
+
+#[test]
 fn identical_text_preserves_cursor_selection_and_caret() {
     let mut ctx = TextContext::default();
     let mut state = editable_state("Hello World", &mut ctx);
