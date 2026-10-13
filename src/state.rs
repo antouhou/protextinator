@@ -267,17 +267,20 @@ impl<T> TextState<T> {
     /// assert_eq!(state.text(), "Updated text");
     /// ```
     pub fn set_text(&mut self, text: &str) {
-        self.params.set_text(text);
+        if self.text() == text {
+            return;
+        }
 
-        // TODO: should we just reset cursor on whole text update?
-        if self.cursor.byte_character_start > self.params.text_for_internal_use().len() {
-            if text.is_empty() {
-                self.cursor = ByteCursor::default()
-            } else {
-                self.update_cursor_before_glyph_with_bytes_offset(
-                    self.params.text_for_internal_use().len(),
-                );
-            }
+        self.params.set_text(text);
+        self.reset_selection();
+        self.relative_caret_position = None;
+
+        let mut byte_offset = self.cursor.byte_character_start.min(text.len());
+        while !self
+            .cursor
+            .update_byte_offset(byte_offset, self.params.text_for_internal_use())
+        {
+            byte_offset -= 1;
         }
     }
 
