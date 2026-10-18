@@ -15,7 +15,7 @@ use crate::{Point, Rect};
 #[cfg(test)]
 use cosmic_text::LayoutGlyph;
 use cosmic_text::{Buffer, Cursor, Edit, Editor, FontSystem, Motion};
-use smol_str::SmolStr;
+use std::ops::Range;
 use std::time::{Duration, Instant};
 
 /// Size comparison epsilon for floating-point calculations.
@@ -55,6 +55,12 @@ pub struct Selection {
 }
 
 impl Selection {
+    fn byte_range(&self) -> Option<Range<usize>> {
+        let origin = self.origin_character_byte_cursor?.byte_character_start;
+        let end = self.ends_before_character_byte_cursor?.byte_character_start;
+        Some(origin.min(end)..origin.max(end))
+    }
+
     /// Returns `true` if there is no active selection.
     ///
     /// A selection is empty if either the origin or the end cursor is not set.
@@ -275,13 +281,7 @@ impl<T> TextState<T> {
         self.reset_selection();
         self.relative_caret_position = None;
 
-        let mut byte_offset = self.cursor.byte_character_start.min(text.len());
-        while !self
-            .cursor
-            .update_byte_offset(byte_offset, self.params.text_for_internal_use())
-        {
-            byte_offset -= 1;
-        }
+        self.update_cursor_before_glyph_with_bytes_offset(self.cursor.byte_character_start);
     }
 
     /// Returns the text in the buffer
@@ -295,7 +295,7 @@ impl<T> TextState<T> {
     /// assert_eq!(state.text(), "Hello, world!");
     /// ```
     pub fn text(&self) -> &str {
-        self.params.original_text()
+        self.params.text()
     }
 
     /// Sets the text style
@@ -462,7 +462,7 @@ impl<T> TextState<T> {
     /// assert_eq!(state.text_char_len(), 7); // 5 ASCII chars + 1 space + 1 emoji
     /// ```
     pub fn text_char_len(&self) -> usize {
-        self.params.original_text().chars().count()
+        self.params.text().chars().count()
     }
 
     /// Returns the character index of the cursor in the text. This is a character index,
@@ -479,55 +479,13 @@ impl<T> TextState<T> {
     /// }
     /// ```
     pub fn cursor_char_index(&self) -> Option<usize> {
-        self.cursor.char_index(self.params.text_for_internal_use())
+        self.cursor.char_index(self.params.text())
     }
-
-    fn insert_char_at_cursor(&mut self, character: char, ctx: &mut TextContext) -> ActionResult {
-        let text = self.params.text_for_internal_use();
-        let at_end = self.cursor.byte_character_start >= text.len();
-        let ends_with_newline = text.ends_with('\n');
-
-        // cosmic_text quirk: when inserting a newline at the end of text that doesn't
-        // already end with a newline, we need to insert two newlines so the caret can
-        // be placed on the new line
-        if character == '\n' && at_end && !ends_with_newline {
-            self.params
-                .insert_char(self.cursor.byte_character_start, '\n');
-            self.params
-                .insert_char(self.cursor.byte_character_start + 1, '\n');
-        } else {
-            self.params
-                .insert_char(self.cursor.byte_character_start, character);
-        }
-
-        self.reshape_if_params_changed(ctx);
-        self.move_cursor(ctx, Motion::Next);
-
-        ActionResult::TextChanged
-    }
-
-    // fn insert_text_at_cursor(&mut self, text: &str) {
-    //     self.params
-    //         .insert_str(self.cursor.byte_character_start, text);
-    //     self.update_cursor_before_glyph_with_bytes_offset(
-    //         self.cursor.byte_character_start + text.len(),
-    //     );
-    // }
 
     fn remove_char_at_cursor(&mut self) {
-        if !self.params.text_for_internal_use().is_empty() {
-            if let Some(prev_char) = self
-                .cursor
-                .prev_char_byte_offset(self.params.text_for_internal_use())
-            {
-                self.remove_character(prev_char);
-                if !self
-                    .cursor
-                    .update_byte_offset(prev_char, self.params.text_for_internal_use())
-                {
-                    // TODO: print a warning
-                }
-            }
+        if let Some(byte_offset) = self.cursor.prev_char_byte_offset(self.params.text()) {
+            self.remove_character(byte_offset);
+            self.update_cursor_before_glyph_with_bytes_offset(byte_offset);
         }
     }
 
@@ -540,13 +498,11 @@ impl<T> TextState<T> {
     }
 
     fn update_cursor_before_glyph_with_cursor(&mut self, cursor: Cursor) {
-        self.cursor
-            .update_cursor(cursor, self.params.text_for_internal_use());
+        self.cursor.update_cursor(cursor, self.params.text());
     }
 
     fn update_cursor_before_glyph_with_bytes_offset(&mut self, byte_offset: usize) {
-        self.cursor
-            .update_byte_offset(byte_offset, self.params.text_for_internal_use());
+        self.cursor.set_byte_offset(byte_offset, self.params.text());
     }
 
     fn remove_character(&mut self, byte_offset: usize) -> Option<char> {
@@ -554,25 +510,12 @@ impl<T> TextState<T> {
     }
 
     fn remove_selected_text(&mut self) -> Option<()> {
-        if let (Some(origin), Some(end)) = (
-            self.selection.origin_character_byte_cursor,
-            self.selection.ends_before_character_byte_cursor,
-        ) {
-            let origin_offset = origin.byte_character_start;
-            let end_offset = end.byte_character_start;
-
-            if origin > end {
-                self.remove_characters(end_offset, origin_offset);
-                self.cursor = end;
-            } else {
-                self.remove_characters(origin_offset, end_offset);
-                self.cursor = origin;
-            }
-            self.reset_selection();
-            Some(())
-        } else {
-            None
-        }
+        let range = self.selection.byte_range()?;
+        let start = range.start;
+        self.remove_characters(start, range.end);
+        self.update_cursor_before_glyph_with_bytes_offset(start);
+        self.reset_selection();
+        Some(())
     }
 
     fn move_cursor_to_selection_left(&mut self) {
@@ -625,11 +568,6 @@ impl<T> TextState<T> {
         }
     }
 
-    fn reset_selection_end(&mut self) {
-        self.selection.ends_before_character_byte_cursor = None;
-        self.selection.lines.clear();
-    }
-
     /// Clears the current text selection.
     ///
     /// # Examples
@@ -649,10 +587,9 @@ impl<T> TextState<T> {
 
     fn select_all(&mut self) {
         self.selection.origin_character_byte_cursor = Some(ByteCursor::string_start());
-        if !self.params.original_text().is_empty() {
-            self.selection.ends_before_character_byte_cursor = Some(
-                ByteCursor::after_last_character(self.params.original_text()),
-            )
+        if !self.params.text().is_empty() {
+            self.selection.ends_before_character_byte_cursor =
+                Some(ByteCursor::after_last_character(self.params.text()))
         } else {
             self.selection.ends_before_character_byte_cursor = None;
         }
@@ -660,7 +597,7 @@ impl<T> TextState<T> {
 
     fn substring_byte_offset(&self, start: usize, end: usize) -> &str {
         // TODO: add bounds checking
-        &self.params.original_text()[start..end]
+        &self.params.text()[start..end]
     }
 
     /// Returns the selected text, or `None` if nothing is selected.
@@ -1196,16 +1133,22 @@ impl<T> TextState<T> {
         ActionResult::TextCopied(selected_text.to_string())
     }
 
-    fn paste_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
-        if self.is_text_selected() {
-            self.move_cursor(ctx, Motion::Left);
-            self.remove_selected_text();
+    fn insert_text_at_cursor(&mut self, ctx: &mut TextContext, text: &str) -> ActionResult {
+        let range = self
+            .selection
+            .byte_range()
+            .unwrap_or(self.cursor.byte_character_start..self.cursor.byte_character_start);
+        let insertion_end = range.start + text.len();
+        if !range.is_empty() || !text.is_empty() {
+            self.params.replace_range(range, text);
+            if text.is_empty() {
+                self.update_cursor_before_glyph_with_bytes_offset(insertion_end);
+            } else {
+                self.cursor
+                    .set_byte_offset_after_insertion(insertion_end, self.params.text());
+            }
         }
-        if !text.is_empty() {
-            let insert_byte_offset = self.cursor.byte_character_start;
-            self.params.insert_str(insert_byte_offset, text);
-            self.update_cursor_before_glyph_with_bytes_offset(insert_byte_offset + text.len());
-        }
+        self.reset_selection();
         self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
         ActionResult::TextChanged
     }
@@ -1225,7 +1168,7 @@ impl<T> TextState<T> {
 
     fn cut_text_range(&mut self, ctx: &mut TextContext, start: usize, end: usize) -> ActionResult {
         let (byte_start, byte_end) = {
-            let text = self.params.original_text();
+            let text = self.params.text();
             let text_length = text.chars().count();
             let start = start.min(text_length);
             let end = end.min(text_length);
@@ -1240,7 +1183,7 @@ impl<T> TextState<T> {
             };
             (char_to_byte_offset(start), char_to_byte_offset(end))
         };
-        let cut_text = self.params.original_text()[byte_start..byte_end].to_owned();
+        let cut_text = self.params.text()[byte_start..byte_end].to_owned();
         self.remove_characters(byte_start, byte_end);
         self.reset_selection();
         self.update_cursor_before_glyph_with_bytes_offset(byte_start);
@@ -1257,6 +1200,7 @@ impl<T> TextState<T> {
         } else {
             self.remove_char_at_cursor();
         }
+        self.reset_selection();
         self.recalculate_with_update_reason(ctx, UpdateReason::DeletedTextAtCursor);
         ActionResult::TextChanged
     }
@@ -1306,20 +1250,6 @@ impl<T> TextState<T> {
         res
     }
 
-    fn insert_character(&mut self, character: &SmolStr, ctx: &mut TextContext) -> ActionResult {
-        if self.is_text_selected() {
-            self.move_cursor(ctx, Motion::Left);
-            self.remove_selected_text();
-        }
-        for character in character.chars() {
-            self.insert_char_at_cursor(character, ctx);
-            self.reset_selection_end();
-        }
-
-        self.recalculate_with_update_reason(ctx, UpdateReason::InsertedText);
-        ActionResult::TextChanged
-    }
-
     /// Applies a text editing action and returns the result.
     ///
     /// Respects the state's `is_editable`, `is_selectable`, and `are_actions_enabled`
@@ -1359,14 +1289,14 @@ impl<T> TextState<T> {
         if self.is_selectable {
             let res = if self.is_editable {
                 match action {
-                    Action::Paste(text) => self.paste_text_at_cursor(ctx, text),
+                    Action::Paste(text) => self.insert_text_at_cursor(ctx, text),
                     Action::Cut => self.cut_selected_text(ctx),
                     Action::DeleteBackward => self.delete_selected_text_or_text_before_cursor(ctx),
                     Action::MoveCursorRight => self.move_cursor_right_recalculate(ctx),
                     Action::MoveCursorLeft => self.move_cursor_left_recalculate(ctx),
                     Action::MoveCursorUp => self.move_cursor_recalculate(ctx, Motion::Up),
                     Action::MoveCursorDown => self.move_cursor_recalculate(ctx, Motion::Down),
-                    Action::InsertChar(character) => self.insert_character(character, ctx),
+                    Action::InsertChar(character) => self.insert_text_at_cursor(ctx, character),
                     _ => ActionResult::None,
                 }
             } else {
@@ -1467,10 +1397,8 @@ impl<T> TextState<T> {
             )?;
 
             if let Some(_origin) = self.selection.origin_character_byte_cursor {
-                self.selection.ends_before_character_byte_cursor = ByteCursor::from_cursor(
-                    byte_cursor_under_position,
-                    self.params.text_for_internal_use(),
-                );
+                self.selection.ends_before_character_byte_cursor =
+                    ByteCursor::from_cursor(byte_cursor_under_position, self.params.text());
             }
 
             // Simple debounce to make scroll speed consistent

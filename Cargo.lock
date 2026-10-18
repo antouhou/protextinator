@@ -1699,6 +1699,7 @@ dependencies = [
  "serde_json",
  "smol_str 0.3.2",
  "sys-locale",
+ "unicode-segmentation",
  "winit",
 ]
 
