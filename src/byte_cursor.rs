@@ -1,4 +1,17 @@
-use cosmic_text::{Affinity, Cursor};
+use cosmic_text::{Affinity, Cursor, LineIter};
+use std::ops::Range;
+
+fn line_ranges(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+    // Match the buffer's final empty line for empty or terminated text.
+    let trailing_empty_line = if text.is_empty() || text.ends_with(['\r', '\n']) {
+        Some(text.len()..text.len())
+    } else {
+        None
+    };
+    LineIter::new(text)
+        .map(|(range, _)| range)
+        .chain(trailing_empty_line)
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ByteCursor {
@@ -45,9 +58,6 @@ impl ByteCursor {
     }
 
     pub fn update_cursor(&mut self, cursor: Cursor, string: &str) -> bool {
-        if cursor == self.cursor {
-            return true;
-        }
         if let Some(byte_offset) = byte_offset_cursor_to_byte_offset(string, cursor) {
             self.cursor = cursor;
             self.byte_character_start = byte_offset;
@@ -58,9 +68,6 @@ impl ByteCursor {
     }
 
     pub fn update_byte_offset(&mut self, byte_offset: usize, string: &str) -> bool {
-        if self.byte_character_start == byte_offset {
-            return true;
-        }
         if let Some(cursor) = char_byte_offset_to_cursor(string, byte_offset) {
             self.cursor = cursor;
             self.byte_character_start = byte_offset;
@@ -76,50 +83,21 @@ impl ByteCursor {
 }
 
 pub fn char_byte_offset_to_cursor(full_text: &str, char_byte_offset: usize) -> Option<Cursor> {
-    // Handle the special case where char_byte_offset equals the string length
-    if char_byte_offset == full_text.len() {
-        // Find the last line and its length
-        let mut last_line_number = 0;
-        let mut last_line_len = 0;
+    if !full_text.is_char_boundary(char_byte_offset) {
+        return None;
+    }
 
-        for (line_number, line) in full_text.lines().enumerate() {
-            last_line_number = line_number;
-            last_line_len = line.len();
+    for (line, line_range) in line_ranges(full_text).enumerate() {
+        if (line_range.start..=line_range.end).contains(&char_byte_offset) {
+            return Some(Cursor {
+                line,
+                index: char_byte_offset - line_range.start,
+                affinity: Affinity::Before,
+            });
         }
-
-        return Some(Cursor {
-            line: last_line_number,
-            index: last_line_len,
-            affinity: Affinity::Before,
-        });
     }
 
-    // Original logic for other cases
-    let mut cumulative = 0;
-    let mut maybe_line = None;
-    let mut maybe_char = None;
-    // Iterator over lines
-    for (line_number, line) in full_text.lines().enumerate() {
-        let line_len = line.len();
-        // Check if char_index is in the current line.
-        if char_byte_offset <= cumulative + line_len {
-            maybe_line = Some(line_number);
-            maybe_char = Some(char_byte_offset.saturating_sub(cumulative));
-            break;
-        }
-        // Add one for the newline character removed by .lines()
-        cumulative += line_len + 1;
-    }
-
-    if let (Some(line), Some(index)) = (maybe_line, maybe_char) {
-        Some(Cursor {
-            line,
-            index,
-            affinity: Default::default(),
-        })
-    } else {
-        None
-    }
+    None
 }
 
 pub fn char_byte_offset_to_char_index(text: &str, char_byte_offset: usize) -> Option<usize> {
@@ -163,27 +141,11 @@ fn previous_char_byte_offset(text: &str, current: usize) -> Option<usize> {
 }
 
 pub fn byte_offset_cursor_to_byte_offset(string: &str, cursor: Cursor) -> Option<usize> {
-    let mut char_byte_offset = 0;
-
-    // Iterate through lines until we reach cursor.line
-    for (line_number, line) in string.lines().enumerate() {
-        if line_number == cursor.line {
-            // Ensure index is within bounds
-            return if cursor.index <= line.len() {
-                // Base offset up to this line + index
-                char_byte_offset += cursor.index;
-
-                Some(char_byte_offset)
-            } else {
-                // Cursor index is out of bounds for this line
-                None
-            };
-        }
-
-        // Add line length plus 1 for the newline character
-        char_byte_offset += line.len() + 1;
+    let line_range = line_ranges(string).nth(cursor.line)?;
+    let line = &string[line_range.start..line_range.end];
+    if line.is_char_boundary(cursor.index) {
+        Some(line_range.start + cursor.index)
+    } else {
+        None
     }
-
-    // If cursor.line is beyond the available lines
-    None
 }

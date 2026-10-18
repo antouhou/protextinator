@@ -1,4 +1,6 @@
-use crate::byte_cursor::{byte_offset_cursor_to_byte_offset, char_byte_offset_to_cursor};
+use crate::byte_cursor::{
+    byte_offset_cursor_to_byte_offset, char_byte_offset_to_cursor, ByteCursor,
+};
 use cosmic_text::{Affinity, Cursor};
 
 #[test]
@@ -194,4 +196,90 @@ pub fn test_byte_offset_cursor_to_byte_offset() {
         },
     );
     assert_eq!(byte_offset, None);
+}
+
+#[test]
+fn cursor_conversions_preserve_offsets_across_mixed_line_endings() {
+    let text = "a\r\n\u{e9}\nb\rc\n\rd\r\n";
+    for (byte_offset, line, index) in [
+        (0, 0, 0),
+        (1, 0, 1),
+        (3, 1, 0),
+        (5, 1, 2),
+        (6, 2, 0),
+        (7, 2, 1),
+        (8, 3, 0),
+        (9, 3, 1),
+        (11, 4, 0),
+        (12, 4, 1),
+        (14, 5, 0),
+    ] {
+        let cursor = Cursor::new(line, index);
+        assert_eq!(
+            char_byte_offset_to_cursor(text, byte_offset),
+            Some(cursor),
+            "byte offset {byte_offset}"
+        );
+        assert_eq!(
+            byte_offset_cursor_to_byte_offset(text, cursor),
+            Some(byte_offset),
+            "cursor {cursor:?}"
+        );
+    }
+}
+
+#[test]
+fn cursor_conversions_reject_offsets_inside_characters_and_line_endings() {
+    let text = "a\r\n\u{e9}\nb\rc\n\rd\r\n";
+    for byte_offset in [2, 4, 10, 13, 15] {
+        assert_eq!(
+            char_byte_offset_to_cursor(text, byte_offset),
+            None,
+            "byte offset {byte_offset}"
+        );
+    }
+    for cursor in [Cursor::new(0, 2), Cursor::new(1, 1), Cursor::new(6, 0)] {
+        assert_eq!(byte_offset_cursor_to_byte_offset(text, cursor), None);
+    }
+}
+
+#[test]
+fn cursor_conversions_include_empty_and_trailing_lines() {
+    for (text, line) in [
+        ("", 0),
+        ("a\n", 1),
+        ("a\r\n", 1),
+        ("a\r", 1),
+        ("a\n\r", 1),
+        ("\n", 1),
+        ("\r\n", 1),
+        ("\r", 1),
+        ("\n\r", 1),
+    ] {
+        let cursor = Cursor::new(line, 0);
+        assert_eq!(char_byte_offset_to_cursor(text, text.len()), Some(cursor));
+        assert_eq!(
+            byte_offset_cursor_to_byte_offset(text, cursor),
+            Some(text.len())
+        );
+        assert_eq!(
+            byte_offset_cursor_to_byte_offset(text, Cursor::new(line + 1, 0)),
+            None
+        );
+    }
+}
+
+#[test]
+fn cursor_update_recomputes_byte_offset_after_line_endings_change() {
+    let line_start = Cursor::new(1, 0);
+    let mut cursor = ByteCursor::from_cursor(line_start, "a\n\u{e9}").unwrap();
+    assert_eq!(cursor.byte_character_start, 2);
+
+    assert!(cursor.update_cursor(line_start, "a\r\n\u{e9}"));
+    assert_eq!(cursor.byte_character_start, 3);
+    assert_eq!(cursor.char_index("a\r\n\u{e9}"), Some(3));
+
+    assert!(!cursor.update_cursor(Cursor::new(1, 1), "a\r\n\u{e9}"));
+    assert_eq!(cursor.cursor, line_start);
+    assert_eq!(cursor.byte_character_start, 3);
 }
