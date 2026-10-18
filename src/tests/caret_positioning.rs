@@ -198,8 +198,6 @@ pub fn test_delete_at_end_of_text() {
 
 #[test]
 pub fn test_insert_newline_at_end_of_text() {
-    // Test for the bug: If the caret is at the very end of the string and trying to delete a character,
-    // the code panics
     let mut ctx = TextContext::default();
     let initial_text = "Hello".to_string();
 
@@ -222,15 +220,19 @@ pub fn test_insert_newline_at_end_of_text() {
     assert_eq!(text_state.cursor_char_index(), Some(5));
     assert_eq!(text_state.text_char_len(), 5);
 
-    // Insert a newline at the end of the text
-    // cosmic_text quirk: we need to insert two newlines at the end of text that doesn't
-    // already end with a newline, so the caret can be placed on the new line
     let result = text_state.apply_action(&mut ctx, &Action::InsertChar("\n".into()));
 
-    // The following assertions should not be reached if the code panics
     assert!(matches!(result, ActionResult::TextChanged));
-    assert_eq!(text_state.text_char_len(), 7);
-    assert_eq!(text_state.text(), "Hello\n\n");
+    assert_eq!(text_state.text_char_len(), 6);
+    assert_eq!(text_state.text(), "Hello\n");
+    assert_eq!(text_state.cursor_char_index(), Some(6));
+    assert!(text_state.caret_position_relative().unwrap().y > 0.0);
+
+    text_state.apply_action(&mut ctx, &Action::InsertChar("x".into()));
+    assert_eq!(text_state.text(), "Hello\nx");
+    assert_eq!(text_state.cursor_char_index(), Some(7));
+    text_state.apply_action(&mut ctx, &Action::DeleteBackward);
+    assert_eq!(text_state.text(), "Hello\n");
     assert_eq!(text_state.cursor_char_index(), Some(6));
 }
 
