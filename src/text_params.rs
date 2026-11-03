@@ -2,6 +2,7 @@ use crate::math::Size;
 use crate::state::SIZE_EPSILON;
 use crate::style::TextStyle;
 use cosmic_text::Metrics;
+use std::ops::Range;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextParams {
@@ -15,7 +16,6 @@ pub(crate) struct TextParams {
 
     changed: bool,
     font_query_changed: bool,
-    line_terminator_has_been_added: bool,
 }
 
 impl TextParams {
@@ -30,7 +30,6 @@ impl TextParams {
 
             changed: true,
             font_query_changed: true,
-            line_terminator_has_been_added: false,
         };
 
         params.set_text(&text);
@@ -48,36 +47,14 @@ impl TextParams {
     }
 
     #[inline(always)]
-    pub fn original_text(&self) -> &str {
-        if self.line_terminator_has_been_added {
-            // If the line terminator was added by the set_text method, remove it to restore the
-            // original text.
-            &self.text[..self.text.len().saturating_sub(1)]
-        } else {
-            // Otherwise, return the text as is.
-            &self.text
-        }
-    }
-
-    #[inline(always)]
-    pub fn text_for_internal_use(&self) -> &str {
+    pub fn text(&self) -> &str {
         &self.text
     }
 
     #[inline(always)]
-    pub fn insert_char(&mut self, index: usize, c: char) {
-        if index <= self.text.len() {
-            self.text.insert(index, c);
-            self.changed = true;
-        }
-    }
-
-    #[inline(always)]
-    pub fn insert_str(&mut self, index: usize, s: &str) {
-        if index <= self.text.len() {
-            self.text.insert_str(index, s);
-            self.changed = true;
-        }
+    pub fn replace_range(&mut self, range: Range<usize>, text: &str) {
+        self.text.replace_range(range, text);
+        self.changed = true;
     }
 
     #[inline(always)]
@@ -126,21 +103,8 @@ impl TextParams {
 
     #[inline(always)]
     pub fn set_text(&mut self, text: &str) {
-        if self.original_text() != text {
+        if self.text != text {
             self.text = text.into();
-            // TODO: move that to the insertion of the newline - this will cause shenanigans
-            //  if text is one line right now, but you intend to add a newline later
-            let is_one_line = !self.text.contains('\n');
-            let ends_with_line_terminator = !self.text.ends_with('\n');
-            if !is_one_line && !ends_with_line_terminator {
-                // Ensure the text always ends with a line terminator. If the text does not end with
-                // a newline, you'll need to add two newline characters to insert a new line at the
-                // end of the text.
-                self.text.push('\n');
-                self.line_terminator_has_been_added = true;
-            } else {
-                self.line_terminator_has_been_added = false;
-            }
             self.changed = true;
         }
     }

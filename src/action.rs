@@ -12,7 +12,8 @@ pub enum Action {
     /// Cut selected text to the clipboard and remove it from the buffer.
     Cut,
     /// Cut the characters in `start..end` (character indices, clamped to the text bounds)
-    /// and remove them from the buffer, placing the cursor at `start`.
+    /// and remove them from the buffer. Place the cursor at `start` or the nearest
+    /// preceding valid position if the deletion joins a paired line ending.
     CutRange { start: usize, end: usize },
     /// Copy selected text to the clipboard without removing it.
     CopySelectedText,

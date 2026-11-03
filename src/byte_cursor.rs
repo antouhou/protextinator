@@ -1,5 +1,6 @@
 use cosmic_text::{Affinity, Cursor, LineIter};
 use std::ops::Range;
+use unicode_segmentation::UnicodeSegmentation;
 
 fn line_ranges(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
     // Match the buffer's final empty line for empty or terminated text.
@@ -67,14 +68,32 @@ impl ByteCursor {
         }
     }
 
-    pub fn update_byte_offset(&mut self, byte_offset: usize, string: &str) -> bool {
-        if let Some(cursor) = char_byte_offset_to_cursor(string, byte_offset) {
-            self.cursor = cursor;
-            self.byte_character_start = byte_offset;
-            true
-        } else {
-            false
+    /// Sets the nearest preceding valid cursor position within the string.
+    pub fn set_byte_offset(&mut self, byte_offset: usize, string: &str) {
+        let mut byte_offset = byte_offset.min(string.len());
+        loop {
+            if let Some(cursor) = char_byte_offset_to_cursor(string, byte_offset) {
+                self.cursor = cursor;
+                self.byte_character_start = byte_offset;
+                return;
+            }
+            byte_offset -= 1;
         }
+    }
+
+    /// Sets the cursor at or after the insertion end, on a grapheme and line boundary.
+    pub fn set_byte_offset_after_insertion(&mut self, byte_offset: usize, string: &str) {
+        for (grapheme_start, _) in string.grapheme_indices(true) {
+            if grapheme_start < byte_offset {
+                continue;
+            }
+            if let Some(cursor) = char_byte_offset_to_cursor(string, grapheme_start) {
+                self.cursor = cursor;
+                self.byte_character_start = grapheme_start;
+                return;
+            }
+        }
+        *self = Self::after_last_character(string);
     }
 
     pub fn prev_char_byte_offset(&self, string: &str) -> Option<usize> {

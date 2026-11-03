@@ -183,12 +183,7 @@ pub(crate) fn update_buffer(
         attrs = attrs.letter_spacing(letter_spacing.0 * scale_factor);
     }
 
-    buffer.set_text(
-        params.text_for_internal_use(),
-        &attrs,
-        Shaping::Advanced,
-        None,
-    );
+    buffer.set_text(params.text(), &attrs, Shaping::Advanced, None);
 
     let mut buffer_measurement = Size::default();
     for line in buffer.lines.iter_mut() {

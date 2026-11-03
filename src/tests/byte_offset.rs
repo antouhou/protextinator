@@ -283,3 +283,31 @@ fn cursor_update_recomputes_byte_offset_after_line_endings_change() {
     assert_eq!(cursor.cursor, line_start);
     assert_eq!(cursor.byte_character_start, 3);
 }
+
+#[test]
+fn setting_byte_offset_normalizes_utf8_and_line_ending_boundaries() {
+    let text = "a\r\n\u{e9}\n\rb";
+    let mut cursor = ByteCursor::string_start();
+    for (requested, expected) in [
+        (0, 0),
+        (1, 1),
+        (2, 1),
+        (3, 3),
+        (4, 3),
+        (5, 5),
+        (6, 5),
+        (7, 7),
+        (8, 8),
+        (usize::MAX, 8),
+    ] {
+        cursor.set_byte_offset(requested, text);
+        assert_eq!(cursor.byte_character_start, expected);
+        assert_eq!(
+            byte_offset_cursor_to_byte_offset(text, cursor.cursor),
+            Some(expected)
+        );
+        assert!(cursor.char_index(text).is_some());
+    }
+    cursor.set_byte_offset(usize::MAX, "");
+    assert_eq!(cursor, ByteCursor::string_start());
+}

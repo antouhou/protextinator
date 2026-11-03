@@ -7,10 +7,12 @@ use cosmic_text::Color;
 mod byte_offset;
 mod caret_positioning;
 mod copy_selected_text;
+mod editing;
 mod resolved_font_family;
 mod serialization;
 mod text_replacement;
 mod text_state;
+mod vertical_alignment;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {
