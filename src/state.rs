@@ -783,12 +783,12 @@ impl<T> TextState<T> {
     ) {
         self.reshape_if_params_changed(ctx);
         self.adjust_scroll_if_cursor_moved(update_reason, &mut ctx.font_system);
+        self.align_vertically();
         // TODO: do only if scroll/selection changed
         self.recalculate_selection_area();
 
         // TODO: do that if the buffer was reshaped
         self.relative_caret_position = self.calculate_caret_position();
-        self.align_vertically();
     }
 
     /// Recalculates and reshapes the text buffer, scroll, caret position, and selection area.

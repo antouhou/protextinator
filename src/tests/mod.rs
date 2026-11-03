@@ -12,6 +12,7 @@ mod resolved_font_family;
 mod serialization;
 mod text_replacement;
 mod text_state;
+mod vertical_alignment;
 
 fn mono_style_test() -> TextStyle {
     TextStyle {
