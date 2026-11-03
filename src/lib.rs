@@ -55,8 +55,10 @@
 //!     let inner_size = state.inner_size();
 //! }
 //!
-//! let mut remove_ids = vec![];
 //! // Optional: removes all states that were not accessed during the current frame
+//! text_manager.remove_unused();
+//! // You can also get the removed ids back:
+//! let mut remove_ids = vec![];
 //! text_manager.end_frame(&mut remove_ids);
 //! ```
 
