@@ -141,7 +141,7 @@ impl<TMetadata> TextManager<TMetadata> {
     }
 
     /// Call at the start of each frame to clear the usage tracker. Together with
-    /// [`Self::end_frame`], this gives you simple garbage collection of text states
+    /// [`Self::remove_unused`] or [`Self::end_frame`], this gives you a simple garbage collection of text states
     /// if you don't want to implement usage tracking yourself.
     ///
     /// # Examples
@@ -155,6 +155,22 @@ impl<TMetadata> TextManager<TMetadata> {
     /// ```
     pub fn start_frame(&mut self) {
         self.text_context.usage_tracker.clear();
+    }
+
+    /// Removes text states not accessed since the last [`Self::start_frame`] call.
+    /// Use [`Self::end_frame`] when you also need the removed IDs.
+    ///
+    /// # Examples
+    /// ```
+    /// use protextinator::TextManager;
+    ///
+    /// let mut manager: TextManager<()> = TextManager::new();
+    /// manager.start_frame();
+    /// // Access the text states needed for this frame.
+    /// manager.remove_unused();
+    /// ```
+    pub fn remove_unused(&mut self) {
+        self.remove_unused_with(|_| {});
     }
 
     /// Call at the end of each frame to remove any text states not accessed since
@@ -172,11 +188,15 @@ impl<TMetadata> TextManager<TMetadata> {
     /// manager.end_frame(&mut removed_ids);
     /// ```
     pub fn end_frame(&mut self, removed_ids: &mut Vec<Id>) {
+        self.remove_unused_with(|id| removed_ids.push(id));
+    }
+
+    fn remove_unused_with(&mut self, mut on_removed: impl FnMut(Id)) {
         let accessed_states = self.text_context.usage_tracker.accessed_states();
         self.text_states.retain(|id, _| {
             let accessed = accessed_states.contains(id);
             if !accessed {
-                removed_ids.push(*id);
+                on_removed(*id);
             }
             accessed
         });
